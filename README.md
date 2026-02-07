@@ -72,11 +72,10 @@ graph TD
 
 ## ⚙️ Installation & Setup
 
-1.  **Repository Setup**: `git clone https://github.com/your-username/glpi-dashboard.git`
+1.  **Repository Setup**: `git clone https://github.com/gguirocha/glpi-dashboard.git`
 2.  **Environment Variables**: Configure `.env.local` with Supabase credentials.
 3.  **Schema Sync**: Execute `database/init.sql` in your Supabase SQL Editor.
 4.  **n8n Workflow**: Import the provided JSON workflow and configure the MySQL connection.
 5.  **Run**: `npm install && npm run dev`
 
 ---
-*Developed with Advanced Engineering standards for high-performance IT environments.*
