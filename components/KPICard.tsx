@@ -17,9 +17,10 @@ interface KPICardProps {
     onGoalChange?: (val: number) => void;
     isTime?: boolean; // If true, Lower is better. If false, Higher is better.
     suffix?: string; // e.g. "%" or "h"
+    tooltip?: React.ReactNode;
 }
 
-export function KPICard({ title, value, description, icon: Icon, trend, trendUp, className, goalValue, onGoalChange, isTime, suffix }: KPICardProps) {
+export function KPICard({ title, value, description, icon: Icon, trend, trendUp, className, goalValue, onGoalChange, isTime, suffix, ...props }: KPICardProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [tempGoal, setTempGoal] = useState(goalValue?.toString() || "");
 
@@ -99,8 +100,21 @@ export function KPICard({ title, value, description, icon: Icon, trend, trendUp,
                     </div>
                 )}
             </div>
-            <div className="p-3 bg-indigo-50 rounded-lg">
-                <Icon className="w-6 h-6 text-indigo-600" />
+            <div className="flex flex-col items-end space-y-2">
+                <div className="p-3 bg-indigo-50 rounded-lg">
+                    <Icon className="w-6 h-6 text-indigo-600" />
+                </div>
+                {props.tooltip && (
+                    <div className="relative group/info">
+                        <div className="p-1 rounded-full hover:bg-slate-100 cursor-help">
+                            <Edit2 className="w-3 h-3 text-slate-300 opacity-0" /> {/* Spacer or use actual icon */}
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+                        </div>
+                        <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 text-white text-xs p-2 rounded-lg shadow-xl z-50 hidden group-hover/info:block">
+                            {props.tooltip}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

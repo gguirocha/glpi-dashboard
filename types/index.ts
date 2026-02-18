@@ -23,3 +23,30 @@ export type GroupedData = {
     value: number;
     fill?: string;
 }
+
+export interface Project {
+    id: number;
+    title: string;
+    status: 'todo' | 'in_progress' | 'done';
+    created_at?: string;
+    completed_at: string | null;
+}
+
+export interface TechnicianRanking {
+    technician_id: number;
+    technician_name: string;
+    qtd_chamados: number;
+    media_score: number;
+    qtd_fora_sla: number;
+    pct_fora_sla: number;
+    total_chamados: number;
+    qtd_atendentes_ativos: number;
+    share_ok: number;
+    share_real: number;
+    k_bayes: number;
+    media_bayes: number;
+    volume_factor: number;
+    media_justa: number;
+    bonus_volume: number;
+    media_final: number;
+}

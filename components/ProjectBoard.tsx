@@ -79,7 +79,7 @@ export function ProjectBoard() {
 
         if (newStatus === 'done') {
             updates.completed_at = new Date().toISOString()
-        } else if (project.status === 'done' && newStatus !== 'done') {
+        } else if (project.status === 'done') {
             updates.completed_at = null
         }
 

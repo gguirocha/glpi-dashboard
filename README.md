@@ -76,7 +76,8 @@ graph TD
 2.  **Environment Variables**: Configure `.env.local` with Supabase credentials.
 3.  **Schema Sync**: Execute `database/init.sql` in your Supabase SQL Editor.
 4.  **n8n Workflow**: Import the provided JSON workflow and configure the MySQL connection.
-5.  **Run**: `npm install && npm run dev`
+5.  **Deployment**: For detailed AWS EC2 deployment instructions, see the [Deployment Guide](file:///C:/Users/Guilherme%20Rocha/.gemini/antigravity/brain/be5fcbd9-9d00-496c-bb11-94d1b1c4b59e/deployment_guide.md).
+6.  **Run**: `npm install && npm run dev`
 
 ---
 *Developed with Advanced Engineering standards for high-performance IT environments.*

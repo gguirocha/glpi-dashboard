@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation"
 import { Ticket } from "@/types"
 import { KPICard } from "./KPICard"
 import { ProjectBoard } from "./ProjectBoard"
-import { BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Users, MapPin, Layers, Calendar, AlertTriangle, UserPlus, LogOut, ChevronDown, User as UserIcon, X, Search, Filter, RefreshCw } from "lucide-react"
+import { TechnicianRankingList } from "./TechnicianRanking"
+import { BarChart3, Clock, CheckCircle, AlertCircle, Info, TrendingUp, Users, MapPin, Layers, Calendar, AlertTriangle, UserPlus, LogOut, ChevronDown, User as UserIcon, X, Search, Filter, RefreshCw } from "lucide-react"
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line
@@ -45,6 +46,9 @@ export default function Dashboard() {
     const [timeLeft, setTimeLeft] = useState(300);
     const [goals, setGoals] = useState({ sla: 90, fcr: 80, time: 4 });
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [overdueList, setOverdueList] = useState<any[]>([]);
+    const [avg3Months, setAvg3Months] = useState(0);
+
 
     useEffect(() => {
         const saved = localStorage.getItem('dashboard_goals');
@@ -134,9 +138,33 @@ export default function Dashboard() {
         } finally {
             setLoading(false)
         }
+        // Date shortcuts
     }
 
-    // --- KPI CALCULATIONS ---
+    const setDateRange = (range: 'current_month' | 'last_month' | 'last_90_days' | 'last_year') => {
+        const now = new Date()
+        let start = new Date()
+        let end = new Date()
+
+        if (range === 'current_month') {
+            start = new Date(now.getFullYear(), now.getMonth(), 1)
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        } else if (range === 'last_month') {
+            start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+            end = new Date(now.getFullYear(), now.getMonth(), 0)
+        } else if (range === 'last_90_days') {
+            start = new Date(now)
+            start.setDate(now.getDate() - 90)
+            end = new Date(now)
+        } else if (range === 'last_year') {
+            start = new Date(now.getFullYear() - 1, 0, 1)
+            end = new Date(now.getFullYear() - 1, 11, 31)
+        }
+
+        setStartDate(start.toISOString().split('T')[0])
+        setEndDate(end.toISOString().split('T')[0])
+    }
+
     const totalTickets = tickets.length
     const prevTotalTickets = previousTickets.length
 
@@ -152,10 +180,20 @@ export default function Dashboard() {
         return acc
     }, {} as Record<string, number>)
 
+    const statusTranslations: Record<string, string> = {
+        'New': 'Novo',
+        'Assigned': 'Atribuído',
+        'Planned': 'Planejado',
+        'Pending': 'Pendente',
+        'Solved': 'Solucionado',
+        'Closed': 'Fechado'
+    };
+
     const statusData = Object.entries(statusCounts).map(([name, value]) => {
         const pct = totalTickets > 0 ? ((value / totalTickets) * 100).toFixed(1) : "0.0"
+        const translatedName = statusTranslations[name] || name;
         return {
-            name: `${name} (${pct}%)`,
+            name: `${translatedName} (${pct}%)`,
             value
         }
     })
@@ -183,11 +221,21 @@ export default function Dashboard() {
         return acc
     }, {} as Record<string, { total: number, count: number }>)
 
+    const priorityTranslations: Record<string, string> = {
+        'Low': 'Baixa',
+        'Medium': 'Média',
+        'High': 'Alta',
+        'Very Low': 'Muito Baixa',
+        'Very High': 'Muito Alta',
+        'Major': 'Crítica'
+    };
+
     const avgTimeByPriority = Object.keys(priorityGroups).map(p => {
         const count = priorityGroups[p].count
         const pct = totalTickets > 0 ? ((count / totalTickets) * 100).toFixed(1) : "0.0"
+        const translatedName = priorityTranslations[p] || p;
         return {
-            name: `${p} (${pct}%)`, // Append % to name
+            name: `${translatedName} (${pct}%)`, // Append % to name
             hours: count > 0 && priorityGroups[p].total > 0 ? (priorityGroups[p].total / count / 3600).toFixed(1) : 0
         }
     })
@@ -257,24 +305,51 @@ export default function Dashboard() {
             // Query: Not Solved (5) or Closed (6), AND sla_time_limit < NOW
             const { data, error } = await supabase
                 .from('dashboard_tickets')
-                .select('sla_time_limit')
+                .select('id, name, sla_time_limit')
                 .not('status_id', 'in', '(5,6)') // Open tickets only
                 .lt('sla_time_limit', nowIso)    // Past deadline
-                .order('sla_time_limit', { ascending: true }); // Oldest first
+                .order('sla_time_limit', { ascending: true }) // Oldest first
+                .limit(10); // Limit usage for tooltip
 
             if (data && !error) {
-                setOverdueCount(data.length);
+                setOverdueList(data);
+
                 if (data.length > 0 && data[0].sla_time_limit) {
                     const oldestDate = new Date(data[0].sla_time_limit);
                     const timeDiff = formatDistance(oldestDate, new Date(), { locale: ptBR });
                     setOldestOverdueTime(`O chamado mais antigo está vencido há ${timeDiff}`);
                 }
             }
+
+            // Fetch Total Count separately to be accurate (since we limited above)
+            const countReq = await supabase
+                .from('dashboard_tickets')
+                .select('id', { count: 'exact', head: true })
+                .not('status_id', 'in', '(5,6)')
+                .lt('sla_time_limit', nowIso);
+
+            if (countReq.count !== null) setOverdueCount(countReq.count);
+        };
+
+        const fetchAvg3Months = async () => {
+            const threeMonthsAgo = subMonths(new Date(), 3).toISOString();
+            const { count, error } = await supabase
+                .from('dashboard_tickets')
+                .select('id', { count: 'exact', head: true })
+                .gte('date_creation', threeMonthsAgo);
+
+            if (count !== null && !error) {
+                setAvg3Months(Math.round(count / 3));
+            }
         };
 
         fetchOverdue();
+        fetchAvg3Months();
         // Poll every 5 minutes to keep this specific counter fresh too
-        const interval = setInterval(fetchOverdue, 300000);
+        const interval = setInterval(() => {
+            fetchOverdue();
+            fetchAvg3Months();
+        }, 300000);
         return () => clearInterval(interval);
     }, []); // Empty dependency array = runs on mount and then independent of date filters
 
@@ -435,21 +510,41 @@ export default function Dashboard() {
                     </div>
 
                     {/* Date Filter */}
-                    <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 flex items-center space-x-2">
-                        <Calendar className="w-4 h-4 text-slate-400 ml-2" />
-                        <input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                            className="text-sm border-none focus:ring-0 text-slate-600 outline-none"
-                        />
-                        <span className="text-slate-300">-</span>
-                        <input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                            className="text-sm border-none focus:ring-0 text-slate-600 outline-none"
-                        />
+                    <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-2">
+                        <div className="flex items-center">
+                            <Filter className="w-4 h-4 text-slate-400 mr-2" />
+                            <select
+                                className="text-sm border-none bg-transparent font-medium text-slate-600 focus:ring-0 cursor-pointer outline-none"
+                                onChange={(e) => {
+                                    if (e.target.value) setDateRange(e.target.value as any);
+                                }}
+                                defaultValue=""
+                            >
+                                <option value="" disabled>Período Rápido</option>
+                                <option value="current_month">Mês Atual</option>
+                                <option value="last_month">Mês Anterior</option>
+                                <option value="last_90_days">Últimos 90 dias</option>
+                                <option value="last_year">Ano Anterior</option>
+                            </select>
+                        </div>
+
+                        <div className="h-4 w-px bg-slate-300 mx-1"></div>
+
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="text-sm border-none focus:ring-0 text-slate-600 outline-none w-32"
+                            />
+                            <span className="text-slate-300">-</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="text-sm border-none focus:ring-0 text-slate-600 outline-none w-32"
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -457,14 +552,37 @@ export default function Dashboard() {
             {/* Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {/* New Overdue Card */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 relative overflow-visible group/overdue">
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <p className="text-sm font-medium text-slate-500">Chamados Vencidos (Aberto)</p>
                             <h3 className="text-2xl font-bold text-slate-800 mt-1">{overdueCount}</h3>
                         </div>
-                        <div className={`p-2 rounded-lg ${overdueCount > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-                            <AlertTriangle className={`w-5 h-5 ${overdueCount > 0 ? 'text-red-500' : 'text-green-500'}`} />
+                        <div className="flex flex-col items-end gap-2">
+                            <div className={`p-2 rounded-lg ${overdueCount > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                                <AlertTriangle className={`w-5 h-5 ${overdueCount > 0 ? 'text-red-500' : 'text-green-500'}`} />
+                            </div>
+                            {overdueList.length > 0 && (
+                                <div className="relative group/info">
+                                    <div className="p-1 rounded-full hover:bg-slate-100 cursor-help">
+                                        <Info className="w-4 h-4 text-slate-400" />
+                                    </div>
+                                    <div className="absolute right-0 top-full mt-2 w-72 bg-slate-800 text-white text-[10px] p-3 rounded-lg shadow-xl z-50 hidden group-hover/info:block max-h-60 overflow-y-auto">
+                                        <p className="font-bold border-b border-slate-600 pb-1 mb-2">Lista de Vencidos (Top 10)</p>
+                                        <div className="space-y-2">
+                                            {overdueList.map(t => (
+                                                <div key={t.id} className="border-b border-slate-700/50 pb-1">
+                                                    <div className="flex justify-between font-bold">
+                                                        <span>#{t.id}</span>
+                                                        <span className="text-red-300">{t.sla_time_limit ? format(new Date(t.sla_time_limit), 'dd/MM HH:mm') : '-'}</span>
+                                                    </div>
+                                                    <p className="truncate opacity-80">{t.name}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                     {overdueCount > 0 ? (
@@ -483,6 +601,7 @@ export default function Dashboard() {
                     icon={Layers}
                     trend={ticketTrendLabel}
                     trendUp={ticketGrowth >= 0}
+                    tooltip={`Média dos últimos 3 meses: ${avg3Months} chamados`}
                 />
                 <KPICard
                     title="Conformidade SLA"
@@ -638,8 +757,14 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
+            {/* Technician Ranking */}
+            <div className="mb-8 min-h-[500px]">
+                <TechnicianRankingList startDate={startDate} endDate={endDate} />
+            </div>
+
             {/* Department Projects */}
             <ProjectBoard />
         </div>
     )
 }
+
