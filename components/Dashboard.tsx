@@ -8,6 +8,7 @@ import { Ticket } from "@/types"
 import { KPICard } from "./KPICard"
 import { ProjectBoard } from "./ProjectBoard"
 import { TechnicianRankingList } from "./TechnicianRanking"
+import { ThemeToggle } from "./ThemeToggle"
 import { BarChart3, Clock, CheckCircle, AlertCircle, Info, TrendingUp, Users, MapPin, Layers, Calendar, AlertTriangle, UserPlus, LogOut, ChevronDown, User as UserIcon, X, Search, Filter, RefreshCw } from "lucide-react"
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
@@ -39,8 +40,8 @@ export default function Dashboard() {
     const [tickets, setTickets] = useState<Ticket[]>([])
     const [previousTickets, setPreviousTickets] = useState<Ticket[]>([])
     const [loading, setLoading] = useState(true)
-    const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"))
-    const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"))
+    const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"))
+    const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"))
 
     // Refresh Timer & Goals State
     const [timeLeft, setTimeLeft] = useState(300);
@@ -442,7 +443,7 @@ export default function Dashboard() {
     if (loading) return <div className="p-10 text-center text-slate-500">Carregando Dados...</div>
 
     return (
-        <div className="min-h-screen bg-slate-50 p-8 font-sans text-slate-900 relative">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-8 font-sans text-slate-900 dark:text-slate-100 relative transition-colors">
             {/* ALERT MODAL */}
             {alertConfig.visible && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-pulse">
@@ -458,7 +459,7 @@ export default function Dashboard() {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Dashboard de TI</h1>
+                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dashboard de TI</h1>
                     <div className="flex items-center space-x-2 mt-1">
                         <p className="text-slate-500">Indicadores de Desempenho GLPI</p>
                         <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full flex items-center">
@@ -470,11 +471,12 @@ export default function Dashboard() {
 
                 {/* Date Filter */}
                 <div className="flex items-center space-x-4">
+                    <ThemeToggle />
                     {/* User Menu */}
                     <div className="relative">
                         <button
                             onClick={() => setUserMenuOpen(!userMenuOpen)}
-                            className="flex items-center space-x-2 bg-white px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm"
+                            className="flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
                         >
                             <div className="bg-indigo-100 p-1 rounded-full">
                                 <UserIcon className="w-4 h-4 text-indigo-600" />
@@ -510,11 +512,11 @@ export default function Dashboard() {
                     </div>
 
                     {/* Date Filter */}
-                    <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-2">
+                    <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-2 transition-colors">
                         <div className="flex items-center">
-                            <Filter className="w-4 h-4 text-slate-400 mr-2" />
+                            <Filter className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2" />
                             <select
-                                className="text-sm border-none bg-transparent font-medium text-slate-600 focus:ring-0 cursor-pointer outline-none"
+                                className="text-sm border-none bg-transparent font-medium text-slate-600 dark:text-slate-300 focus:ring-0 cursor-pointer outline-none [&>option]:bg-white dark:[&>option]:bg-slate-800"
                                 onChange={(e) => {
                                     if (e.target.value) setDateRange(e.target.value as any);
                                 }}
@@ -528,21 +530,21 @@ export default function Dashboard() {
                             </select>
                         </div>
 
-                        <div className="h-4 w-px bg-slate-300 mx-1"></div>
+                        <div className="h-4 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
 
                         <div className="flex items-center space-x-2">
                             <input
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
-                                className="text-sm border-none focus:ring-0 text-slate-600 outline-none w-32"
+                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-32 [color-scheme:light_dark]"
                             />
-                            <span className="text-slate-300">-</span>
+                            <span className="text-slate-300 dark:text-slate-500">-</span>
                             <input
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
-                                className="text-sm border-none focus:ring-0 text-slate-600 outline-none w-32"
+                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-32 [color-scheme:light_dark]"
                             />
                         </div>
                     </div>
@@ -552,29 +554,29 @@ export default function Dashboard() {
             {/* Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {/* New Overdue Card */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 relative overflow-visible group/overdue">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 relative overflow-visible group/overdue transition-colors">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-sm font-medium text-slate-500">Chamados Vencidos (Aberto)</p>
-                            <h3 className="text-2xl font-bold text-slate-800 mt-1">{overdueCount}</h3>
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Chamados Vencidos (Aberto)</p>
+                            <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{overdueCount}</h3>
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                            <div className={`p-2 rounded-lg ${overdueCount > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-                                <AlertTriangle className={`w-5 h-5 ${overdueCount > 0 ? 'text-red-500' : 'text-green-500'}`} />
+                            <div className={`p-2 rounded-lg ${overdueCount > 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
+                                <AlertTriangle className={`w-5 h-5 ${overdueCount > 0 ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`} />
                             </div>
                             {overdueList.length > 0 && (
                                 <div className="relative group/info">
-                                    <div className="p-1 rounded-full hover:bg-slate-100 cursor-help">
-                                        <Info className="w-4 h-4 text-slate-400" />
+                                    <div className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 cursor-help">
+                                        <Info className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                                     </div>
-                                    <div className="absolute right-0 top-full mt-2 w-72 bg-slate-800 text-white text-[10px] p-3 rounded-lg shadow-xl z-50 hidden group-hover/info:block max-h-60 overflow-y-auto">
-                                        <p className="font-bold border-b border-slate-600 pb-1 mb-2">Lista de Vencidos (Top 10)</p>
+                                    <div className="absolute right-0 top-full mt-2 w-72 bg-slate-800 dark:bg-slate-700 text-white text-[10px] p-3 rounded-lg shadow-xl z-50 hidden group-hover/info:block max-h-60 overflow-y-auto">
+                                        <p className="font-bold border-b border-slate-600 dark:border-slate-500 pb-1 mb-2">Lista de Vencidos (Top 10)</p>
                                         <div className="space-y-2">
                                             {overdueList.map(t => (
-                                                <div key={t.id} className="border-b border-slate-700/50 pb-1">
+                                                <div key={t.id} className="border-b border-slate-700/50 dark:border-slate-600/50 pb-1">
                                                     <div className="flex justify-between font-bold">
                                                         <span>#{t.id}</span>
-                                                        <span className="text-red-300">{t.sla_time_limit ? format(new Date(t.sla_time_limit), 'dd/MM HH:mm') : '-'}</span>
+                                                        <span className="text-red-300 dark:text-red-400">{t.sla_time_limit ? format(new Date(t.sla_time_limit), 'dd/MM HH:mm') : '-'}</span>
                                                     </div>
                                                     <p className="truncate opacity-80">{t.name}</p>
                                                 </div>
@@ -635,8 +637,8 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 
                 {/* Ticket Evolution */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
                         <TrendingUp className="w-5 h-5 mr-2 text-indigo-500" />
                         Evolução do Volume de Chamados
                     </h3>
@@ -654,8 +656,8 @@ export default function Dashboard() {
                 </div>
 
                 {/* Status Breakdown */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
                         <AlertCircle className="w-5 h-5 mr-2 text-indigo-500" />
                         Visão Geral por Status
                     </h3>
@@ -684,17 +686,17 @@ export default function Dashboard() {
             {/* Secondary Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
                 {/* Top Categories */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 col-span-1">
-                    <h3 className="text-lg font-semibold mb-4">Principais Categorias</h3>
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-1 transition-colors">
+                    <h3 className="text-lg font-semibold mb-4 dark:text-slate-100">Principais Categorias</h3>
                     <div className="space-y-4">
                         {topCategories.map((cat, i) => (
                             <div key={i} className="flex items-center justify-between">
-                                <span className="text-sm text-slate-600 truncate max-w-[70%]" title={cat.name}>{cat.name}</span>
+                                <span className="text-sm text-slate-600 dark:text-slate-300 truncate max-w-[70%]" title={cat.name}>{cat.name}</span>
                                 <div className="flex items-center">
-                                    <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden mr-3">
+                                    <div className="w-24 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mr-3">
                                         <div className="h-full bg-indigo-500" style={{ width: `${(cat.value / totalTickets) * 100}%` }}></div>
                                     </div>
-                                    <span className="text-xs font-bold text-slate-700">{cat.value}</span>
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{cat.value}</span>
                                 </div>
                             </div>
                         ))}
@@ -702,8 +704,8 @@ export default function Dashboard() {
                 </div>
 
                 {/* Avg Resolution by Priority */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 col-span-2">
-                    <h3 className="text-lg font-semibold mb-6">Tempo Médio Resolução (Horas) por Prioridade</h3>
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-2 transition-colors">
+                    <h3 className="text-lg font-semibold mb-6 dark:text-slate-100">Tempo Médio Resolução (Horas) por Prioridade</h3>
                     <div className="h-64 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={avgTimeByPriority} layout="vertical">
@@ -720,8 +722,8 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                 {/* By Location */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
                         <MapPin className="w-5 h-5 mr-2 text-indigo-500" />
                         Chamados por Localização
                     </h3>
@@ -739,8 +741,8 @@ export default function Dashboard() {
                 </div>
 
                 {/* Top Departments */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
                         <Users className="w-5 h-5 mr-2 text-indigo-500" />
                         Chamados por Departamento
                     </h3>

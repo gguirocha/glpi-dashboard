@@ -54,10 +54,10 @@ export function KPICard({ title, value, description, icon: Icon, trend, trendUp,
     }
 
     return (
-        <div className={cn("bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-start justify-between", className)}>
+        <div className={cn("bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-start justify-between transition-colors", className)}>
             <div>
-                <h3 className="text-slate-500 text-sm font-medium mb-1">{title}</h3>
-                <div className="text-3xl font-bold text-slate-800 tracking-tight">{value}</div>
+                <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">{title}</h3>
+                <div className="text-3xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{value}</div>
 
                 {/* Goal Section */}
                 {onGoalChange && (
@@ -101,8 +101,8 @@ export function KPICard({ title, value, description, icon: Icon, trend, trendUp,
                 )}
             </div>
             <div className="flex flex-col items-end space-y-2">
-                <div className="p-3 bg-indigo-50 rounded-lg">
-                    <Icon className="w-6 h-6 text-indigo-600" />
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
+                    <Icon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 {props.tooltip && (
                     <div className="relative group/info">

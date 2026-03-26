@@ -99,17 +99,49 @@ export function ProjectBoard() {
         }
     }
 
+    async function updateCompletionDate(project: Project, dateStr: string) {
+        if (!dateStr) return;
+        try {
+            // Se for no formato dd/mm/yyyy a gente precisaria lidar, mas o input type="date" devolve YYYY-MM-DD
+            const isoDate = new Date(dateStr).toISOString();
+            const { error } = await supabase
+                .from('dashboard_projects')
+                .update({ completed_at: isoDate })
+                .eq('id', project.id)
+
+            if (error) throw error
+
+            setProjects(projects.map(p =>
+                p.id === project.id ? { ...p, completed_at: isoDate } : p
+            ))
+        } catch (error) {
+            console.error("Error updating completion date:", error)
+        }
+    }
+
+    const getSortedProjects = (status: string) => {
+        const filtered = projects.filter(p => p.status === status);
+        if (status === 'done') {
+            filtered.sort((a, b) => {
+                const dateA = a.completed_at ? new Date(a.completed_at).getTime() : 0;
+                const dateB = b.completed_at ? new Date(b.completed_at).getTime() : 0;
+                return dateB - dateA; // Descending
+            });
+        }
+        return filtered;
+    }
+
     const columns = [
-        { id: 'todo', title: 'Ações a serem Realizadas', color: 'bg-slate-100 border-slate-200' },
-        { id: 'in_progress', title: 'Em Andamento', color: 'bg-blue-50 border-blue-100' },
-        { id: 'done', title: 'Ações Realizadas', color: 'bg-emerald-50 border-emerald-100' }
+        { id: 'todo', title: 'Ações a serem Realizadas', color: 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700' },
+        { id: 'in_progress', title: 'Em Andamento', color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/50' },
+        { id: 'done', title: 'Ações Realizadas', color: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50' }
     ]
 
     if (loading) return <div className="text-center py-4 text-slate-400">Carregando quadro...</div>
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mb-8">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 mb-8 transition-colors">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center justify-between">
                 <span>Gestão de Projetos do Departamento</span>
                 {!isAdding && (
                     <button
@@ -150,21 +182,21 @@ export function ProjectBoard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {columns.map(col => (
                     <div key={col.id} className={`rounded-xl p-4 border ${col.color} min-h-[300px]`}>
-                        <h4 className="font-semibold text-slate-700 mb-4 flex items-center justify-between">
+                        <h4 className="font-semibold text-slate-700 dark:text-slate-300 mb-4 flex items-center justify-between">
                             {col.title}
-                            <span className="bg-white px-2 py-0.5 rounded-full text-xs text-slate-500 border border-slate-200">
+                            <span className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                                 {projects.filter(p => p.status === col.id).length}
                             </span>
                         </h4>
 
-                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                            {projects.filter(p => p.status === col.id).map(project => (
-                                <div key={project.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 group hover:shadow-md transition-shadow relative">
+                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                            {getSortedProjects(col.id).map(project => (
+                                <div key={project.id} className="bg-white dark:bg-slate-800 p-3 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 group hover:shadow-md transition-shadow relative">
                                     <div className="flex justify-between items-start mb-2">
-                                        <p className="text-sm text-slate-800 font-medium leading-tight">{project.title}</p>
+                                        <p className="text-sm text-slate-800 dark:text-slate-100 font-medium leading-tight">{project.title}</p>
                                         <button
                                             onClick={() => deleteProject(project.id)}
-                                            className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 p-1 bg-white/80 rounded"
+                                            className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 p-1 bg-white/80 dark:bg-slate-800/80 rounded"
                                             title="Excluir Projeto"
                                         >
                                             <X className="w-4 h-4" />
@@ -172,16 +204,22 @@ export function ProjectBoard() {
                                     </div>
 
                                     {project.completed_at && project.status === 'done' && (
-                                        <p className="text-xs text-emerald-600 mb-2 font-medium">
-                                            Concluído em: {new Date(project.completed_at).toLocaleDateString('pt-BR')}
-                                        </p>
+                                         <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 font-medium flex items-center gap-1 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded p-1 -ml-1 w-max">
+                                             <span>Data:</span>
+                                             <input 
+                                                 type="date" 
+                                                 className="bg-transparent border-none text-xs p-0 m-0 focus:ring-0 cursor-pointer w-auto"
+                                                 value={project.completed_at.split('T')[0]}
+                                                 onChange={(e) => updateCompletionDate(project, e.target.value)}
+                                             />
+                                         </div>
                                     )}
 
-                                    <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-50">
+                                    <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-50 dark:border-slate-700/50">
                                         {col.id !== 'todo' ? (
                                             <button
                                                 onClick={() => moveProject(project, 'prev')}
-                                                className="text-slate-400 hover:text-indigo-600"
+                                                className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                                                 title="Mover para trás"
                                             >
                                                 <ArrowLeft className="w-4 h-4" />
@@ -191,7 +229,7 @@ export function ProjectBoard() {
                                         {col.id !== 'done' ? (
                                             <button
                                                 onClick={() => moveProject(project, 'next')}
-                                                className="text-slate-400 hover:text-indigo-600"
+                                                className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
                                                 title="Mover para frente"
                                             >
                                                 <ArrowRight className="w-4 h-4" />
