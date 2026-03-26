@@ -469,82 +469,87 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Date Filter */}
-                <div className="flex items-center space-x-4">
-                    <ThemeToggle />
-                    {/* User Menu */}
-                    <div className="relative">
-                        <button
-                            onClick={() => setUserMenuOpen(!userMenuOpen)}
-                            className="flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
-                        >
-                            <div className="bg-indigo-100 p-1 rounded-full">
-                                <UserIcon className="w-4 h-4 text-indigo-600" />
-                            </div>
-                            <div className="text-left hidden sm:block">
-                                <p className="text-xs font-bold text-slate-700 leading-none">{profile?.full_name || user?.email?.split('@')[0]}</p>
-                                <p className="text-sm text-slate-400 leading-none uppercase scale-75 origin-left mt-0.5">{profile?.role === 'admin' ? 'Administrador' : 'Usuário'}</p>
-                            </div>
-                            <ChevronDown className="w-4 h-4 text-slate-400" />
-                        </button>
+                {/* Controls */}
+                <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4 w-full md:w-auto">
+                    {/* Theme and User */}
+                    <div className="flex items-center justify-between w-full xl:w-auto gap-4">
+                        <ThemeToggle />
+                        {/* User Menu */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                                className="flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+                            >
+                                <div className="bg-indigo-100 p-1 rounded-full">
+                                    <UserIcon className="w-4 h-4 text-indigo-600" />
+                                </div>
+                                <div className="text-left hidden sm:block">
+                                    <p className="text-xs font-bold text-slate-700 leading-none">{profile?.full_name || user?.email?.split('@')[0]}</p>
+                                    <p className="text-sm text-slate-400 leading-none uppercase scale-75 origin-left mt-0.5">{profile?.role === 'admin' ? 'Administrador' : 'Usuário'}</p>
+                                </div>
+                                <ChevronDown className="w-4 h-4 text-slate-400" />
+                            </button>
 
-                        {userMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
-                                {isAdmin && (
+                            {userMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => router.push('/admin/users')}
+                                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
+                                        >
+                                            <UserPlus className="w-4 h-4 mr-2 text-indigo-600" />
+                                            Cadastrar Usuários
+                                        </button>
+                                    )}
+                                    <div className="h-px bg-slate-100 my-1"></div>
                                     <button
-                                        onClick={() => router.push('/admin/users')}
-                                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
+                                        onClick={() => signOut()}
+                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
                                     >
-                                        <UserPlus className="w-4 h-4 mr-2 text-indigo-600" />
-                                        Cadastrar Usuários
+                                        <LogOut className="w-4 h-4 mr-2" />
+                                        Sair do Sistema
                                     </button>
-                                )}
-                                <div className="h-px bg-slate-100 my-1"></div>
-                                <button
-                                    onClick={() => signOut()}
-                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
-                                >
-                                    <LogOut className="w-4 h-4 mr-2" />
-                                    Sair do Sistema
-                                </button>
-                            </div>
-                        )}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Date Filter */}
-                    <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-2 transition-colors">
-                        <div className="flex items-center">
-                            <Filter className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2" />
-                            <select
-                                className="text-sm border-none bg-transparent font-medium text-slate-600 dark:text-slate-300 focus:ring-0 cursor-pointer outline-none [&>option]:bg-white dark:[&>option]:bg-slate-800"
-                                onChange={(e) => {
-                                    if (e.target.value) setDateRange(e.target.value as any);
-                                }}
-                                defaultValue=""
-                            >
-                                <option value="" disabled>Período Rápido</option>
-                                <option value="current_month">Mês Atual</option>
-                                <option value="last_month">Mês Anterior</option>
-                                <option value="last_90_days">Últimos 90 dias</option>
-                                <option value="last_year">Ano Anterior</option>
-                            </select>
+                    <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 transition-colors w-full xl:w-auto">
+                        <div className="flex items-center justify-between sm:justify-start">
+                            <div className="flex items-center">
+                                <Filter className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2" />
+                                <select
+                                    className="text-sm border-none bg-transparent font-medium text-slate-600 dark:text-slate-300 focus:ring-0 cursor-pointer outline-none [&>option]:bg-white dark:[&>option]:bg-slate-800 w-full"
+                                    onChange={(e) => {
+                                        if (e.target.value) setDateRange(e.target.value as any);
+                                    }}
+                                    defaultValue=""
+                                >
+                                    <option value="" disabled>Período Rápido</option>
+                                    <option value="current_month">Mês Atual</option>
+                                    <option value="last_month">Mês Anterior</option>
+                                    <option value="last_90_days">Últimos 90 dias</option>
+                                    <option value="last_year">Ano Anterior</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <div className="h-4 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                        <div className="hidden sm:block h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
 
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center justify-between sm:justify-start space-x-2">
                             <input
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => setStartDate(e.target.value)}
-                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-32 [color-scheme:light_dark]"
+                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-[110px] sm:w-32 [color-scheme:light_dark]"
                             />
                             <span className="text-slate-300 dark:text-slate-500">-</span>
                             <input
                                 type="date"
                                 value={endDate}
                                 onChange={(e) => setEndDate(e.target.value)}
-                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-32 [color-scheme:light_dark]"
+                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-[110px] sm:w-32 [color-scheme:light_dark]"
                             />
                         </div>
                     </div>
