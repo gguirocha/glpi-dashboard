@@ -1,11 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
 
+// Global flag to prevent multiple executions during dev hot-reloads and continuous requests
+let isSystemInitialized = false;
+
 export async function ensureSystemReady() {
+    if (isSystemInitialized) return;
+
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
     if (!serviceRoleKey || !supabaseUrl) {
-        console.error("System Init: Missing Service Role Key or URL. Admin auto-creation skipped.");
+        // Use console.warn to avoid Next.js Red Screen of Death in dev mode
+        console.warn("System Init: Missing Service Role Key or URL. Admin auto-creation skipped.");
         return;
     }
 
@@ -17,6 +23,8 @@ export async function ensureSystemReady() {
     });
 
     try {
+        isSystemInitialized = true; // Set block early to prevent subsequent fetches from spamming during startup Wait or delays
+
         // 1. Check if Admin user exists by Email (Supabase primary key)
         // We use a predefined email for the 'admin' user since Supabase requires emails.
         const ADMIN_EMAIL = "admin@glpi.local";
@@ -46,7 +54,7 @@ export async function ensureSystemReady() {
                 // Optional: Ensure profile exists even if user exists (idempotency for profile)
                 // We'd need to fetch the user ID first.
             } else {
-                console.error("System Init: Failed to create admin user:", createError.message);
+                console.warn("System Init: Failed to create admin user (warn):", createError.message);
             }
         } else if (user) {
             console.log("System Init: Admin user created successfully.");

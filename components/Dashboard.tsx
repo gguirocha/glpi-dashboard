@@ -1,777 +1,1167 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
-import { useAuth } from "@/context/AuthContext"
-import { useRouter } from "next/navigation"
-import { Ticket } from "@/types"
-import { KPICard } from "./KPICard"
-import { ProjectBoard } from "./ProjectBoard"
-import { TechnicianRankingList } from "./TechnicianRanking"
-import { ThemeToggle } from "./ThemeToggle"
-import { BarChart3, Clock, CheckCircle, AlertCircle, Info, TrendingUp, Users, MapPin, Layers, Calendar, AlertTriangle, UserPlus, LogOut, ChevronDown, User as UserIcon, X, Search, Filter, RefreshCw } from "lucide-react"
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { Ticket } from "@/types";
+import { KPICard } from "./KPICard";
+import { ProjectBoard } from "./ProjectBoard";
+import { TechnicianRankingList } from "./TechnicianRanking";
+import { ThemeToggle } from "./ThemeToggle";
+import { NetworkMonitor } from "./NetworkMonitor";
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-    PieChart, Pie, Cell, LineChart, Line
-} from "recharts"
-import { format, subDays, subMonths, subYears, differenceInDays, isWithinInterval, parseISO, startOfDay, endOfDay, startOfMonth, endOfMonth, formatDistance } from "date-fns"
-import { ptBR } from "date-fns/locale"
+  BarChart3,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Info,
+  TrendingUp,
+  Users,
+  MapPin,
+  Layers,
+  Calendar,
+  AlertTriangle,
+  UserPlus,
+  LogOut,
+  ChevronDown,
+  User as UserIcon,
+  X,
+  Search,
+  Filter,
+  RefreshCw,
+  MonitorPlay,
+  Volume2,
+} from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from "recharts";
+import {
+  format,
+  subDays,
+  subMonths,
+  subYears,
+  differenceInDays,
+  isWithinInterval,
+  parseISO,
+  startOfDay,
+  endOfDay,
+  startOfMonth,
+  endOfMonth,
+  formatDistance,
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const COLORS = [
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+];
 
 export default function Dashboard() {
-    const { user, profile, isAdmin, isLoading: authLoading, signOut } = useAuth();
-    const router = useRouter();
+  const { user, profile, isAdmin, isLoading: authLoading, signOut } = useAuth();
+  const router = useRouter();
 
-    // Auth Protection
-    useEffect(() => {
-        if (!authLoading && !user) {
-            router.push('/login');
-        }
-    }, [user, authLoading, router]);
+  // Auth Protection
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
 
+  // As it already is, no change is strictly necessary based on the provided input.
+  // If there were specific new hooks to add, they were not clearly provided.
+  // Given the prompt to make the change faithfully and without unrelated edits,
+  // and the "Code Edit" section being syntactically incorrect if inserted directly,
+  // I will return the original code as no valid, new code to insert was provided.
 
-    // As it already is, no change is strictly necessary based on the provided input.
-    // If there were specific new hooks to add, they were not clearly provided.
-    // Given the prompt to make the change faithfully and without unrelated edits,
-    // and the "Code Edit" section being syntactically incorrect if inserted directly,
-    // I will return the original code as no valid, new code to insert was provided.
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [previousTickets, setPreviousTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [startDate, setStartDate] = useState(
+    format(startOfMonth(new Date()), "yyyy-MM-dd"),
+  );
+  const [endDate, setEndDate] = useState(
+    format(endOfMonth(new Date()), "yyyy-MM-dd"),
+  );
 
-    const [tickets, setTickets] = useState<Ticket[]>([])
-    const [previousTickets, setPreviousTickets] = useState<Ticket[]>([])
-    const [loading, setLoading] = useState(true)
-    const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), "yyyy-MM-dd"))
-    const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), "yyyy-MM-dd"))
+  // Refresh Timer & Goals State
+  const [timeLeft, setTimeLeft] = useState(300);
+  const [goals, setGoals] = useState({ sla: 90, fcr: 80, time: 4 });
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [overdueList, setOverdueList] = useState<any[]>([]);
+  const [avg3Months, setAvg3Months] = useState(0);
+  const [presentationMode, setPresentationMode] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
 
-    // Refresh Timer & Goals State
-    const [timeLeft, setTimeLeft] = useState(300);
-    const [goals, setGoals] = useState({ sla: 90, fcr: 80, time: 4 });
-    const [userMenuOpen, setUserMenuOpen] = useState(false);
-    const [overdueList, setOverdueList] = useState<any[]>([]);
-    const [avg3Months, setAvg3Months] = useState(0);
-
-
-    useEffect(() => {
-        const saved = localStorage.getItem('dashboard_goals');
-        if (saved) {
-            try { setGoals(JSON.parse(saved)); } catch (e) { console.error("Error parsing goals", e); }
-        }
-    }, []);
-
-    const updateGoal = (key: string, val: number) => {
-        const newGoals = { ...goals, [key]: val };
-        setGoals(newGoals);
-        localStorage.setItem('dashboard_goals', JSON.stringify(newGoals));
+  // Fullscreen behavior handler
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && presentationMode) {
+        setPresentationMode(false);
+      }
     };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, [presentationMode]);
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    fetchTickets();
-                    return 300;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [startDate, endDate]);
+  // Presentation Mode Timer Focus
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (presentationMode) {
+      interval = setInterval(() => {
+        setCurrentSlide((prev) => (prev + 1) % 7); // 7 slides: 0 to 6
+      }, 7000);
+    }
+    return () => clearInterval(interval);
+  }, [presentationMode]);
 
-    const formatTimeLeft = () => {
-        const m = Math.floor(timeLeft / 60);
-        const s = timeLeft % 60;
-        return `${m}:${s.toString().padStart(2, '0')}`;
-    };
+  const togglePresentation = () => {
+    if (!presentationMode) {
+      setPresentationMode(true);
+      setCurrentSlide(0);
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      setPresentationMode(false);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch((err) => console.error(err));
+      }
+    }
+  };
 
-    useEffect(() => {
-        fetchTickets()
-    }, [startDate, endDate])
+  useEffect(() => {
+    const saved = localStorage.getItem("dashboard_goals");
+    if (saved) {
+      try {
+        setGoals(JSON.parse(saved));
+      } catch (e) {
+        console.error("Error parsing goals", e);
+      }
+    }
+  }, []);
 
-    async function fetchTickets() {
-        setLoading(true)
-        try {
-            // 1. Current Period
-            const currentReq = supabase
-                .from('dashboard_tickets')
-                .select('*')
-                .gte('date_creation', `${startDate}T00:00:00`)
-                .lte('date_creation', `${endDate}T23:59:59`)
+  const updateGoal = (key: string, val: number) => {
+    const newGoals = { ...goals, [key]: val };
+    setGoals(newGoals);
+    localStorage.setItem("dashboard_goals", JSON.stringify(newGoals));
+  };
 
-            // 2. Comparison Period logic
-            // 2. Comparison Period logic
-            const start = parseISO(startDate)
-            const end = parseISO(endDate)
-
-            // Validate dates manually typed by user
-            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-                // Stop fetching if dates are invalid to prevent crash
-                setLoading(false)
-                return
-            }
-
-            // Logic: ALWAYS compare against the FULL previous month relative to the start date
-            // Example: Start 01/01/2026 -> Compare with Full Dec 2025 (01/12/2025 - 31/12/2025)
-            // Example: Start 05/02/2026 -> Compare with Full Jan 2026 (01/01/2026 - 31/01/2026)
-
-            const prevMonthDate = subMonths(start, 1)
-            const prevStart = startOfMonth(prevMonthDate)
-            const prevEnd = endOfMonth(prevMonthDate)
-
-            const formattedPrevStart = format(prevStart, "yyyy-MM-dd")
-            const formattedPrevEnd = format(prevEnd, "yyyy-MM-dd")
-
-            const prevReq = supabase
-                .from('dashboard_tickets')
-                .select('*')
-                .gte('date_creation', `${formattedPrevStart}T00:00:00`)
-                .lte('date_creation', `${formattedPrevEnd}T23:59:59`)
-
-            const [currRes, prevRes] = await Promise.all([currentReq, prevReq])
-
-            if (currRes.error) throw currRes.error
-            if (prevRes.error) throw prevRes.error
-
-            if (currRes.data) setTickets(currRes.data as unknown as Ticket[])
-            if (prevRes.data) setPreviousTickets(prevRes.data as unknown as Ticket[])
-
-        } catch (err) {
-            console.error("Error fetching tickets:", err)
-        } finally {
-            setLoading(false)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          fetchTickets();
+          return 300;
         }
-        // Date shortcuts
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [startDate, endDate]);
+
+  const formatTimeLeft = () => {
+    const m = Math.floor(timeLeft / 60);
+    const s = timeLeft % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  useEffect(() => {
+    fetchTickets();
+  }, [startDate, endDate]);
+
+  async function fetchTickets() {
+    setLoading(true);
+    try {
+      // 1. Current Period
+      const currentReq = supabase
+        .from("dashboard_tickets")
+        .select("*")
+        .gte("date_creation", `${startDate}T00:00:00`)
+        .lte("date_creation", `${endDate}T23:59:59`);
+
+      // 2. Comparison Period logic
+      // 2. Comparison Period logic
+      const start = parseISO(startDate);
+      const end = parseISO(endDate);
+
+      // Validate dates manually typed by user
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        // Stop fetching if dates are invalid to prevent crash
+        setLoading(false);
+        return;
+      }
+
+      // Logic: ALWAYS compare against the FULL previous month relative to the start date
+      // Example: Start 01/01/2026 -> Compare with Full Dec 2025 (01/12/2025 - 31/12/2025)
+      // Example: Start 05/02/2026 -> Compare with Full Jan 2026 (01/01/2026 - 31/01/2026)
+
+      const prevMonthDate = subMonths(start, 1);
+      const prevStart = startOfMonth(prevMonthDate);
+      const prevEnd = endOfMonth(prevMonthDate);
+
+      const formattedPrevStart = format(prevStart, "yyyy-MM-dd");
+      const formattedPrevEnd = format(prevEnd, "yyyy-MM-dd");
+
+      const prevReq = supabase
+        .from("dashboard_tickets")
+        .select("*")
+        .gte("date_creation", `${formattedPrevStart}T00:00:00`)
+        .lte("date_creation", `${formattedPrevEnd}T23:59:59`);
+
+      const [currRes, prevRes] = await Promise.all([currentReq, prevReq]);
+
+      if (currRes.error) throw currRes.error;
+      if (prevRes.error) throw prevRes.error;
+
+      if (currRes.data) setTickets(currRes.data as unknown as Ticket[]);
+      if (prevRes.data) setPreviousTickets(prevRes.data as unknown as Ticket[]);
+    } catch (err) {
+      console.error("Error fetching tickets:", err);
+    } finally {
+      setLoading(false);
+    }
+    // Date shortcuts
+  }
+
+  const setDateRange = (
+    range: "current_month" | "last_month" | "last_90_days" | "last_year",
+  ) => {
+    const now = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (range === "current_month") {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    } else if (range === "last_month") {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      end = new Date(now.getFullYear(), now.getMonth(), 0);
+    } else if (range === "last_90_days") {
+      start = new Date(now);
+      start.setDate(now.getDate() - 90);
+      end = new Date(now);
+    } else if (range === "last_year") {
+      start = new Date(now.getFullYear() - 1, 0, 1);
+      end = new Date(now.getFullYear() - 1, 11, 31);
     }
 
-    const setDateRange = (range: 'current_month' | 'last_month' | 'last_90_days' | 'last_year') => {
-        const now = new Date()
-        let start = new Date()
-        let end = new Date()
+    setStartDate(start.toISOString().split("T")[0]);
+    setEndDate(end.toISOString().split("T")[0]);
+  };
 
-        if (range === 'current_month') {
-            start = new Date(now.getFullYear(), now.getMonth(), 1)
-            end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-        } else if (range === 'last_month') {
-            start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-            end = new Date(now.getFullYear(), now.getMonth(), 0)
-        } else if (range === 'last_90_days') {
-            start = new Date(now)
-            start.setDate(now.getDate() - 90)
-            end = new Date(now)
-        } else if (range === 'last_year') {
-            start = new Date(now.getFullYear() - 1, 0, 1)
-            end = new Date(now.getFullYear() - 1, 11, 31)
-        }
+  const totalTickets = tickets.length;
+  const prevTotalTickets = previousTickets.length;
 
-        setStartDate(start.toISOString().split('T')[0])
-        setEndDate(end.toISOString().split('T')[0])
-    }
+  const ticketGrowth =
+    prevTotalTickets > 0
+      ? ((totalTickets - prevTotalTickets) / prevTotalTickets) * 100
+      : 0;
 
-    const totalTickets = tickets.length
-    const prevTotalTickets = previousTickets.length
+  const ticketTrendLabel = `${ticketGrowth > 0 ? "+" : ""}${ticketGrowth.toFixed(1)}% vs mês anterior`;
 
-    const ticketGrowth = prevTotalTickets > 0
-        ? ((totalTickets - prevTotalTickets) / prevTotalTickets) * 100
-        : 0
+  // 1. Status Overview
+  const statusCounts = tickets.reduce(
+    (acc, t) => {
+      acc[t.status_label] = (acc[t.status_label] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
-    const ticketTrendLabel = `${ticketGrowth > 0 ? '+' : ''}${ticketGrowth.toFixed(1)}% vs mês anterior`
+  const statusTranslations: Record<string, string> = {
+    New: "Novo",
+    Assigned: "Atribuído",
+    Planned: "Planejado",
+    Pending: "Pendente",
+    Solved: "Solucionado",
+    Closed: "Fechado",
+  };
 
-    // 1. Status Overview
-    const statusCounts = tickets.reduce((acc, t) => {
-        acc[t.status_label] = (acc[t.status_label] || 0) + 1
-        return acc
-    }, {} as Record<string, number>)
-
-    const statusTranslations: Record<string, string> = {
-        'New': 'Novo',
-        'Assigned': 'Atribuído',
-        'Planned': 'Planejado',
-        'Pending': 'Pendente',
-        'Solved': 'Solucionado',
-        'Closed': 'Fechado'
+  const statusData = Object.entries(statusCounts).map(([name, value]) => {
+    const pct =
+      totalTickets > 0 ? ((value / totalTickets) * 100).toFixed(1) : "0.0";
+    const translatedName = statusTranslations[name] || name;
+    return {
+      name: `${translatedName} (${pct}%)`,
+      value,
     };
+  });
 
-    const statusData = Object.entries(statusCounts).map(([name, value]) => {
-        const pct = totalTickets > 0 ? ((value / totalTickets) * 100).toFixed(1) : "0.0"
-        const translatedName = statusTranslations[name] || name;
-        return {
-            name: `${translatedName} (${pct}%)`,
-            value
-        }
-    })
+  const closedTickets =
+    (statusCounts["Solved"] || 0) + (statusCounts["Closed"] || 0);
 
-    const closedTickets = (statusCounts['Solved'] || 0) + (statusCounts['Closed'] || 0)
+  // 2. FCR (First Call Resolution)
+  // Logic: Tickets Solved/Closed AND (Followups <= 1 [flagged from backend])
+  const fcrCount = tickets.filter(
+    (t) =>
+      (t.status_label === "Solved" || t.status_label === "Closed") &&
+      t.count_cless_one_hour,
+  ).length;
+  const fcrRate =
+    closedTickets > 0 ? ((fcrCount / closedTickets) * 100).toFixed(1) : "0";
 
-    // 2. FCR (First Call Resolution)
-    // Logic: Tickets Solved/Closed AND (Followups <= 1 [flagged from backend])
-    const fcrCount = tickets.filter(t => (t.status_label === 'Solved' || t.status_label === 'Closed') && t.count_cless_one_hour).length
-    const fcrRate = closedTickets > 0 ? ((fcrCount / closedTickets) * 100).toFixed(1) : "0"
+  // 3. SLA Compliance
+  const slaViolated = tickets.filter((t) => t.is_sla_violated).length;
+  const slaComplianceRate =
+    totalTickets > 0
+      ? (((totalTickets - slaViolated) / totalTickets) * 100).toFixed(1)
+      : 0;
 
-    // 3. SLA Compliance
-    const slaViolated = tickets.filter(t => t.is_sla_violated).length
-    const slaComplianceRate = totalTickets > 0 ? (((totalTickets - slaViolated) / totalTickets) * 100).toFixed(1) : 0
+  // 4. Avg Resolution Time by Priority
+  const priorityGroups = tickets.reduce(
+    (acc, t) => {
+      if (!acc[t.priority_label])
+        acc[t.priority_label] = { total: 0, count: 0 };
+      if (t.time_to_resolve > 0) {
+        acc[t.priority_label].total += t.time_to_resolve;
+      }
+      // Always count for percentage even if time_to_resolve is 0 (though avg requires time)
+      // Actually typically we want % of total volume.
+      acc[t.priority_label].count += 1;
+      return acc;
+    },
+    {} as Record<string, { total: number; count: number }>,
+  );
 
-    // 4. Avg Resolution Time by Priority
-    const priorityGroups = tickets.reduce((acc, t) => {
-        if (!acc[t.priority_label]) acc[t.priority_label] = { total: 0, count: 0 }
-        if (t.time_to_resolve > 0) {
-            acc[t.priority_label].total += t.time_to_resolve
-        }
-        // Always count for percentage even if time_to_resolve is 0 (though avg requires time)
-        // Actually typically we want % of total volume.
-        acc[t.priority_label].count += 1
-        return acc
-    }, {} as Record<string, { total: number, count: number }>)
+  const priorityTranslations: Record<string, string> = {
+    Low: "Baixa",
+    Medium: "Média",
+    High: "Alta",
+    "Very Low": "Muito Baixa",
+    "Very High": "Muito Alta",
+    Major: "Crítica",
+  };
 
-    const priorityTranslations: Record<string, string> = {
-        'Low': 'Baixa',
-        'Medium': 'Média',
-        'High': 'Alta',
-        'Very Low': 'Muito Baixa',
-        'Very High': 'Muito Alta',
-        'Major': 'Crítica'
+  const avgTimeByPriority = Object.keys(priorityGroups).map((p) => {
+    const count = priorityGroups[p].count;
+    const pct =
+      totalTickets > 0 ? ((count / totalTickets) * 100).toFixed(1) : "0.0";
+    const translatedName = priorityTranslations[p] || p;
+    return {
+      name: `${translatedName} (${pct}%)`, // Append % to name
+      hours:
+        count > 0 && priorityGroups[p].total > 0
+          ? (priorityGroups[p].total / count / 3600).toFixed(1)
+          : 0,
     };
+  });
 
-    const avgTimeByPriority = Object.keys(priorityGroups).map(p => {
-        const count = priorityGroups[p].count
-        const pct = totalTickets > 0 ? ((count / totalTickets) * 100).toFixed(1) : "0.0"
-        const translatedName = priorityTranslations[p] || p;
-        return {
-            name: `${translatedName} (${pct}%)`, // Append % to name
-            hours: count > 0 && priorityGroups[p].total > 0 ? (priorityGroups[p].total / count / 3600).toFixed(1) : 0
-        }
-    })
+  // 5. Top Categories
+  const categoryCounts = tickets.reduce(
+    (acc, t) => {
+      const cat = t.category_name || "Sem Categoria";
+      acc[cat] = (acc[cat] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const topCategories = Object.entries(categoryCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10)
+    .map(([name, value]) => ({ name, value }));
 
-    // 5. Top Categories
-    const categoryCounts = tickets.reduce((acc, t) => {
-        const cat = t.category_name || 'Sem Categoria'
-        acc[cat] = (acc[cat] || 0) + 1
-        return acc
-    }, {} as Record<string, number>)
-    const topCategories = Object.entries(categoryCounts)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
-        .map(([name, value]) => ({ name, value }))
-
-    // 6. Top Departments
-    const deptCounts = tickets.reduce((acc, t) => {
-        const dept = t.department_name || 'Desconhecido'
-        acc[dept] = (acc[dept] || 0) + 1
-        return acc
-    }, {} as Record<string, number>)
-    const topDepartments = Object.entries(deptCounts)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
-        .map(([name, value]) => {
-            const pct = totalTickets > 0 ? ((value / totalTickets) * 100).toFixed(1) : "0.0"
-            return {
-                name: `${name} (${pct}%)`,
-                value
-            }
-        })
-
-    // 7. Location
-    const locationCounts = tickets.reduce((acc, t) => {
-        const loc = t.location_name || 'Desconhecido'
-        acc[loc] = (acc[loc] || 0) + 1
-        return acc
-    }, {} as Record<string, number>)
-    const byLocation = Object.entries(locationCounts)
-        .map(([name, value]) => {
-            const pct = totalTickets > 0 ? ((value / totalTickets) * 100).toFixed(1) : "0.0"
-            return {
-                name: `${name} (${pct}%)`,
-                value
-            }
-        })
-
-    // 8. Trend (Daily)
-    const dailyTrend = tickets.reduce((acc, t) => {
-        const date = t.date_creation.split('T')[0]
-        acc[date] = (acc[date] || 0) + 1
-        return acc
-    }, {} as Record<string, number>)
-    const trendData = Object.entries(dailyTrend)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, count]) => ({ date, count }))
-
-    // --- OVERDUE TICKETS LOGIC (Independent of Date Filter) ---
-    // We need to fetch this separately because the main 'tickets' state is filtered by date.
-    const [overdueCount, setOverdueCount] = useState(0);
-    const [oldestOverdueTime, setOldestOverdueTime] = useState("");
-
-    useEffect(() => {
-        const fetchOverdue = async () => {
-            const nowIso = new Date().toISOString();
-
-            // Query: Not Solved (5) or Closed (6), AND sla_time_limit < NOW
-            const { data, error } = await supabase
-                .from('dashboard_tickets')
-                .select('id, name, sla_time_limit')
-                .not('status_id', 'in', '(5,6)') // Open tickets only
-                .lt('sla_time_limit', nowIso)    // Past deadline
-                .order('sla_time_limit', { ascending: true }) // Oldest first
-                .limit(10); // Limit usage for tooltip
-
-            if (data && !error) {
-                setOverdueList(data);
-
-                if (data.length > 0 && data[0].sla_time_limit) {
-                    const oldestDate = new Date(data[0].sla_time_limit);
-                    const timeDiff = formatDistance(oldestDate, new Date(), { locale: ptBR });
-                    setOldestOverdueTime(`O chamado mais antigo está vencido há ${timeDiff}`);
-                }
-            }
-
-            // Fetch Total Count separately to be accurate (since we limited above)
-            const countReq = await supabase
-                .from('dashboard_tickets')
-                .select('id', { count: 'exact', head: true })
-                .not('status_id', 'in', '(5,6)')
-                .lt('sla_time_limit', nowIso);
-
-            if (countReq.count !== null) setOverdueCount(countReq.count);
-        };
-
-        const fetchAvg3Months = async () => {
-            const threeMonthsAgo = subMonths(new Date(), 3).toISOString();
-            const { count, error } = await supabase
-                .from('dashboard_tickets')
-                .select('id', { count: 'exact', head: true })
-                .gte('date_creation', threeMonthsAgo);
-
-            if (count !== null && !error) {
-                setAvg3Months(Math.round(count / 3));
-            }
-        };
-
-        fetchOverdue();
-        fetchAvg3Months();
-        // Poll every 5 minutes to keep this specific counter fresh too
-        const interval = setInterval(() => {
-            fetchOverdue();
-            fetchAvg3Months();
-        }, 300000);
-        return () => clearInterval(interval);
-    }, []); // Empty dependency array = runs on mount and then independent of date filters
-
-    // --- ALERT SYSTEM ---
-    const [alertConfig, setAlertConfig] = useState<{ visible: boolean; title: string; message: string; type: 'warning' | 'error' }>({
-        visible: false, title: "", message: "", type: "warning"
+  // 6. Top Departments
+  const deptCounts = tickets.reduce(
+    (acc, t) => {
+      const dept = t.department_name || "Desconhecido";
+      acc[dept] = (acc[dept] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const topDepartments = Object.entries(deptCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10)
+    .map(([name, value]) => {
+      const pct =
+        totalTickets > 0 ? ((value / totalTickets) * 100).toFixed(1) : "0.0";
+      return {
+        name: `${name} (${pct}%)`,
+        value,
+      };
     });
-    const lastNearBreachAlert = useState(0); // Timestamp
-    const lastExcessiveOverdueAlert = useState(0); // Timestamp
-    // Using refs for timestamps to avoid re-renders impacting logic, but useState is fine for simple intervals. 
-    // Actually refs are better for timers.
-    const lastAlertRefs = {
-        nearBreach: 0,
-        excessiveOverdue: 0
-    };
-    // We need state to force re-render if we want to show/hide, but refs for checking logic safely.
-    // Let's rely on standard variables outside component or refs inside.
-    const alertTimers = useState<{ near: number, excessive: number }>({ near: 0, excessive: 0 }); // Using state to persist? No, refs are better.
 
-    // SOUND - Base64 simple alarm beep
-    const playAlarm = () => {
+  // 7. Location
+  const locationCounts = tickets.reduce(
+    (acc, t) => {
+      const loc = t.location_name || "Desconhecido";
+      acc[loc] = (acc[loc] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const byLocation = Object.entries(locationCounts).map(([name, value]) => {
+    const pct =
+      totalTickets > 0 ? ((value / totalTickets) * 100).toFixed(1) : "0.0";
+    return {
+      name: `${name} (${pct}%)`,
+      value,
+    };
+  });
+
+  // 8. Trend (Daily)
+  const dailyTrend = tickets.reduce(
+    (acc, t) => {
+      const date = t.date_creation.split("T")[0];
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
+  const trendData = Object.entries(dailyTrend)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
+
+  // --- OVERDUE TICKETS LOGIC (Independent of Date Filter) ---
+  // We need to fetch this separately because the main 'tickets' state is filtered by date.
+  const [overdueCount, setOverdueCount] = useState(0);
+  const [oldestOverdueTime, setOldestOverdueTime] = useState("");
+
+  useEffect(() => {
+    const fetchOverdue = async () => {
+      const nowIso = new Date().toISOString();
+
+      // Query: Not Solved (5) or Closed (6), AND sla_time_limit < NOW
+      const { data, error } = await supabase
+        .from("dashboard_tickets")
+        .select("id, name, sla_time_limit")
+        .not("status_id", "in", "(5,6)") // Open tickets only
+        .lt("sla_time_limit", nowIso) // Past deadline
+        .order("sla_time_limit", { ascending: true }) // Oldest first
+        .limit(10); // Limit usage for tooltip
+
+      if (data && !error) {
+        setOverdueList(data);
+
+        if (data.length > 0 && data[0].sla_time_limit) {
+          const oldestDate = new Date(data[0].sla_time_limit);
+          const timeDiff = formatDistance(oldestDate, new Date(), {
+            locale: ptBR,
+          });
+          setOldestOverdueTime(
+            `O chamado mais antigo está vencido há ${timeDiff}`,
+          );
+        }
+      }
+
+      // Fetch Total Count separately to be accurate (since we limited above)
+      const countReq = await supabase
+        .from("dashboard_tickets")
+        .select("id", { count: "exact", head: true })
+        .not("status_id", "in", "(5,6)")
+        .lt("sla_time_limit", nowIso);
+
+      if (countReq.count !== null) setOverdueCount(countReq.count);
+    };
+
+    const fetchAvg3Months = async () => {
+      const threeMonthsAgo = subMonths(new Date(), 3).toISOString();
+      const { count, error } = await supabase
+        .from("dashboard_tickets")
+        .select("id", { count: "exact", head: true })
+        .gte("date_creation", threeMonthsAgo);
+
+      if (count !== null && !error) {
+        setAvg3Months(Math.round(count / 3));
+      }
+    };
+
+    fetchOverdue();
+    fetchAvg3Months();
+    // Poll every 5 minutes to keep this specific counter fresh too
+    const interval = setInterval(() => {
+      fetchOverdue();
+      fetchAvg3Months();
+    }, 300000);
+    return () => clearInterval(interval);
+  }, []); // Empty dependency array = runs on mount and then independent of date filters
+
+  // --- ALERT SYSTEM ---
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: "warning" | "error";
+  }>({
+    visible: false,
+    title: "",
+    message: "",
+    type: "warning",
+  });
+  const lastNearBreachAlert = useState(0); // Timestamp
+  const lastExcessiveOverdueAlert = useState(0); // Timestamp
+  // Using refs for timestamps to avoid re-renders impacting logic, but useState is fine for simple intervals.
+  // Actually refs are better for timers.
+  const lastAlertRefs = {
+    nearBreach: 0,
+    excessiveOverdue: 0,
+  };
+  // We need state to force re-render if we want to show/hide, but refs for checking logic safely.
+  // Let's rely on standard variables outside component or refs inside.
+  const alertTimers = useState<{ near: number; excessive: number; network: number }>({
+    near: 0,
+    excessive: 0,
+    network: 0,
+  }); // Using state to persist? No, refs are better.
+
+  // SOUND - Base64 simple alarm beep
+  const playAlarm = () => {
+    try {
+      // Simple Beep Sound Data URI (Short Beep)
+      const audioData =
+        "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU7/3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//s=";
+      const audio = new Audio(audioData);
+      audio.loop = true;
+      audio
+        .play()
+        .catch((e) =>
+          console.log("Audio play failed (user interaction needed):", e),
+        );
+
+      setTimeout(() => {
+        audio.pause();
+        audio.currentTime = 0;
+      }, 4000);
+    } catch (e) {
+      console.error("Sound error", e);
+    }
+  };
+
+  useEffect(() => {
+    const checkAlerts = async () => {
+      const now = Date.now();
+      const nowObj = new Date();
+
+      // 1. Check Excessive Overdue ( > 5 ) - Every 30 min (1800000 ms)
+      if (overdueCount > 5) {
+        if (now - alertTimers[0].excessive > 1800000) {
+          setAlertConfig({
+            visible: true,
+            title: "ALERTA CRÍTICO",
+            message: `Quantidade excessiva de chamados vencidos (${overdueCount}). Atuação Imediata Necessária!`,
+            type: "error",
+          });
+          playAlarm();
+          alertTimers[1]((prev) => ({ ...prev, excessive: now }));
+
+          // Auto hide after 4s
+          setTimeout(
+            () => setAlertConfig((prev) => ({ ...prev, visible: false })),
+            4000,
+          );
+          return; // Prioritize this alert
+        }
+      }
+
+      // 2. Check Near Breach ( < 2h ) - Every 20 min (1200000 ms)
+      // Filter tickets: Open AND (sla_time_limit > now AND sla_time_limit < now + 2h)
+      const twoHoursFromNow = new Date(nowObj.getTime() + 2 * 60 * 60 * 1000);
+      const nearBreachTickets = tickets.filter(
+        (t) =>
+          !t.date_solved &&
+          t.status_id !== 5 &&
+          t.status_id !== 6 &&
+          t.sla_time_limit &&
+          new Date(t.sla_time_limit) > nowObj &&
+          new Date(t.sla_time_limit) <= twoHoursFromNow,
+      );
+
+      if (nearBreachTickets.length > 0) {
+        if (now - alertTimers[0].near > 1200000) {
+          setAlertConfig({
+            visible: true,
+            title: "ATENÇÃO: VENCIMENTO PRÓXIMO",
+            message: `Existem ${nearBreachTickets.length} chamados prestes a vencer (2h). Verifique a fila!`,
+            type: "warning",
+          });
+          playAlarm();
+          alertTimers[1]((prev) => ({ ...prev, near: now }));
+
+          setTimeout(
+            () => setAlertConfig((prev) => ({ ...prev, visible: false })),
+            4000,
+          );
+        }
+      }
+
+      // 3. Check Network Links (Offline) - Every 5 min (300000 ms)
+      if (now - alertTimers[0].network > 300000) {
         try {
-            // Simple Beep Sound Data URI (Short Beep)
-            const audioData = "data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU7/3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3//f/9//3/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//n/+f/5//s=";
-            const audio = new Audio(audioData);
-            audio.loop = true;
-            audio.play().catch(e => console.log("Audio play failed (user interaction needed):", e));
+          const { data: downLinks } = await supabase
+            .from("network_links")
+            .select("name")
+            .eq("last_status", "down");
 
-            setTimeout(() => {
-                audio.pause();
-                audio.currentTime = 0;
-            }, 4000);
-        } catch (e) { console.error("Sound error", e); }
-    };
+          if (downLinks && downLinks.length > 0) {
+            const linkNames = downLinks.map(l => l.name).join(", ");
+            setAlertConfig({
+              visible: true,
+              title: "ALERTA DE INFRAESTRUTURA",
+              message: `Link(s) de Internet OFFLINE: ${linkNames}. Verifique imediatamente!`,
+              type: "error",
+            });
+            playAlarm();
+            alertTimers[1]((prev) => ({ ...prev, network: now }));
 
-    useEffect(() => {
-        const checkAlerts = () => {
-            const now = Date.now();
-            const nowObj = new Date();
-
-            // 1. Check Excessive Overdue ( > 5 ) - Every 30 min (1800000 ms)
-            if (overdueCount > 5) {
-                if (now - alertTimers[0].excessive > 1800000) {
-                    setAlertConfig({
-                        visible: true,
-                        title: "ALERTA CRÍTICO",
-                        message: `Quantidade excessiva de chamados vencidos (${overdueCount}). Atuação Imediata Necessária!`,
-                        type: "error"
-                    });
-                    playAlarm();
-                    alertTimers[1](prev => ({ ...prev, excessive: now }));
-
-                    // Auto hide after 4s
-                    setTimeout(() => setAlertConfig(prev => ({ ...prev, visible: false })), 4000);
-                    return; // Prioritize this alert
-                }
-            }
-
-            // 2. Check Near Breach ( < 2h ) - Every 20 min (1200000 ms)
-            // Filter tickets: Open AND (sla_time_limit > now AND sla_time_limit < now + 2h)
-            const twoHoursFromNow = new Date(nowObj.getTime() + 2 * 60 * 60 * 1000);
-            const nearBreachTickets = tickets.filter(t =>
-                !t.date_solved &&
-                t.status_id !== 5 && t.status_id !== 6 &&
-                t.sla_time_limit &&
-                new Date(t.sla_time_limit) > nowObj &&
-                new Date(t.sla_time_limit) <= twoHoursFromNow
+            setTimeout(
+              () => setAlertConfig((prev) => ({ ...prev, visible: false })),
+              4000,
             );
+          }
+        } catch (err) {
+          console.error("Error checking network links:", err);
+        }
+      }
+    };
+    
+    checkAlerts(); // Run immediately on mount or dependency change (guarded by timers)
+    const interval = setInterval(checkAlerts, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [overdueCount, tickets, alertTimers]);
 
-            if (nearBreachTickets.length > 0) {
-                if (now - alertTimers[0].near > 1200000) {
-                    setAlertConfig({
-                        visible: true,
-                        title: "ATENÇÃO: VENCIMENTO PRÓXIMO",
-                        message: `Existem ${nearBreachTickets.length} chamados prestes a vencer (2h). Verifique a fila!`,
-                        type: "warning"
-                    });
-                    playAlarm();
-                    alertTimers[1](prev => ({ ...prev, near: now }));
-
-                    setTimeout(() => setAlertConfig(prev => ({ ...prev, visible: false })), 4000);
-                }
-            }
-        };
-
-        const interval = setInterval(checkAlerts, 60000); // Check every minute
-        return () => clearInterval(interval);
-    }, [overdueCount, tickets, alertTimers]);
-
-    if (loading) return <div className="p-10 text-center text-slate-500">Carregando Dados...</div>
-
+  if (loading)
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-8 font-sans text-slate-900 dark:text-slate-100 relative transition-colors">
-            {/* ALERT MODAL */}
-            {alertConfig.visible && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-pulse">
-                    <div className={`p-8 rounded-2xl shadow-2xl max-w-lg text-center transform scale-110 transition-transform ${alertConfig.type === 'error' ? 'bg-red-600 text-white' : 'bg-amber-500 text-white'
-                        }`}>
-                        <AlertTriangle className="w-16 h-16 mx-auto mb-4" />
-                        <h2 className="text-4xl font-black mb-2 uppercase">{alertConfig.title}</h2>
-                        <p className="text-xl font-bold">{alertConfig.message}</p>
-                    </div>
-                </div>
-            )}
+      <div className="p-10 text-center text-slate-500">Carregando Dados...</div>
+    );
 
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dashboard de TI</h1>
-                    <div className="flex items-center space-x-2 mt-1">
-                        <p className="text-slate-500">Indicadores de Desempenho GLPI</p>
-                        <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full flex items-center">
-                            <Clock className="w-3 h-3 mr-1" />
-                            Atualiza em {formatTimeLeft()}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Controls */}
-                <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4 w-full md:w-auto">
-                    {/* Theme and User */}
-                    <div className="flex items-center justify-between w-full xl:w-auto gap-4">
-                        <ThemeToggle />
-                        {/* User Menu */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                                className="flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
-                            >
-                                <div className="bg-indigo-100 p-1 rounded-full">
-                                    <UserIcon className="w-4 h-4 text-indigo-600" />
-                                </div>
-                                <div className="text-left hidden sm:block">
-                                    <p className="text-xs font-bold text-slate-700 leading-none">{profile?.full_name || user?.email?.split('@')[0]}</p>
-                                    <p className="text-sm text-slate-400 leading-none uppercase scale-75 origin-left mt-0.5">{profile?.role === 'admin' ? 'Administrador' : 'Usuário'}</p>
-                                </div>
-                                <ChevronDown className="w-4 h-4 text-slate-400" />
-                            </button>
-
-                            {userMenuOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
-                                    {isAdmin && (
-                                        <button
-                                            onClick={() => router.push('/admin/users')}
-                                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
-                                        >
-                                            <UserPlus className="w-4 h-4 mr-2 text-indigo-600" />
-                                            Cadastrar Usuários
-                                        </button>
-                                    )}
-                                    <div className="h-px bg-slate-100 my-1"></div>
-                                    <button
-                                        onClick={() => signOut()}
-                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
-                                    >
-                                        <LogOut className="w-4 h-4 mr-2" />
-                                        Sair do Sistema
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Date Filter */}
-                    <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 transition-colors w-full xl:w-auto">
-                        <div className="flex items-center justify-between sm:justify-start">
-                            <div className="flex items-center">
-                                <Filter className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2" />
-                                <select
-                                    className="text-sm border-none bg-transparent font-medium text-slate-600 dark:text-slate-300 focus:ring-0 cursor-pointer outline-none [&>option]:bg-white dark:[&>option]:bg-slate-800 w-full"
-                                    onChange={(e) => {
-                                        if (e.target.value) setDateRange(e.target.value as any);
-                                    }}
-                                    defaultValue=""
-                                >
-                                    <option value="" disabled>Período Rápido</option>
-                                    <option value="current_month">Mês Atual</option>
-                                    <option value="last_month">Mês Anterior</option>
-                                    <option value="last_90_days">Últimos 90 dias</option>
-                                    <option value="last_year">Ano Anterior</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="hidden sm:block h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
-
-                        <div className="flex items-center justify-between sm:justify-start space-x-2">
-                            <input
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-[110px] sm:w-32 [color-scheme:light_dark]"
-                            />
-                            <span className="text-slate-300 dark:text-slate-500">-</span>
-                            <input
-                                type="date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-[110px] sm:w-32 [color-scheme:light_dark]"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Overview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* New Overdue Card */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 relative overflow-visible group/overdue transition-colors">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Chamados Vencidos (Aberto)</p>
-                            <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{overdueCount}</h3>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                            <div className={`p-2 rounded-lg ${overdueCount > 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
-                                <AlertTriangle className={`w-5 h-5 ${overdueCount > 0 ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`} />
-                            </div>
-                            {overdueList.length > 0 && (
-                                <div className="relative group/info">
-                                    <div className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 cursor-help">
-                                        <Info className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                                    </div>
-                                    <div className="absolute right-0 top-full mt-2 w-72 bg-slate-800 dark:bg-slate-700 text-white text-[10px] p-3 rounded-lg shadow-xl z-50 hidden group-hover/info:block max-h-60 overflow-y-auto">
-                                        <p className="font-bold border-b border-slate-600 dark:border-slate-500 pb-1 mb-2">Lista de Vencidos (Top 10)</p>
-                                        <div className="space-y-2">
-                                            {overdueList.map(t => (
-                                                <div key={t.id} className="border-b border-slate-700/50 dark:border-slate-600/50 pb-1">
-                                                    <div className="flex justify-between font-bold">
-                                                        <span>#{t.id}</span>
-                                                        <span className="text-red-300 dark:text-red-400">{t.sla_time_limit ? format(new Date(t.sla_time_limit), 'dd/MM HH:mm') : '-'}</span>
-                                                    </div>
-                                                    <p className="truncate opacity-80">{t.name}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    {overdueCount > 0 ? (
-                        <div className="flex items-center text-xs text-red-600 font-medium bg-red-50 p-2 rounded-md">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {oldestOverdueTime}
-                        </div>
-                    ) : (
-                        <div className="text-xs text-green-600 font-medium">Tudo em dia!</div>
-                    )}
-                </div>
-
-                <KPICard
-                    title="Total de Chamados"
-                    value={totalTickets}
-                    icon={Layers}
-                    trend={ticketTrendLabel}
-                    trendUp={ticketGrowth >= 0}
-                    tooltip={`Média dos últimos 3 meses: ${avg3Months} chamados`}
-                />
-                <KPICard
-                    title="Conformidade SLA"
-                    value={`${slaComplianceRate}%`}
-                    icon={CheckCircle}
-                    goalValue={goals.sla}
-                    onGoalChange={(val) => updateGoal('sla', val)}
-                    suffix="%"
-                />
-                <KPICard
-                    title="Resolução 1º Nível (FCR)"
-                    value={`${fcrRate}%`}
-                    icon={TrendingUp}
-                    description="Resolvido c/ 1 acomp. ou menos"
-                    goalValue={goals.fcr}
-                    onGoalChange={(val) => updateGoal('fcr', val)}
-                    suffix="%"
-                />
-                <KPICard
-                    title="Tempo Médio Resolução"
-                    value={`${(avgTimeByPriority.reduce((acc, i) => acc + Number(i.hours), 0) / (avgTimeByPriority.length || 1)).toFixed(1)}h`}
-                    icon={Clock}
-                    goalValue={goals.time}
-                    onGoalChange={(val) => updateGoal('time', val)}
-                    isTime={true}
-                    suffix="h"
-                />
-            </div>
-
-            {/* Main Charts Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-
-                {/* Ticket Evolution */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
-                        <TrendingUp className="w-5 h-5 mr-2 text-indigo-500" />
-                        Evolução do Volume de Chamados
-                    </h3>
-                    <div className="h-80 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={trendData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                                <YAxis tickLine={false} axisLine={false} />
-                                <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                <Line type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Status Breakdown */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
-                        <AlertCircle className="w-5 h-5 mr-2 text-indigo-500" />
-                        Visão Geral por Status
-                    </h3>
-                    <div className="h-80 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={statusData}
-                                    innerRadius={80}
-                                    outerRadius={120}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                >
-                                    {statusData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <RechartsTooltip />
-                                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
-
-            {/* Secondary Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                {/* Top Categories */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-1 transition-colors">
-                    <h3 className="text-lg font-semibold mb-4 dark:text-slate-100">Principais Categorias</h3>
-                    <div className="space-y-4">
-                        {topCategories.map((cat, i) => (
-                            <div key={i} className="flex items-center justify-between">
-                                <span className="text-sm text-slate-600 dark:text-slate-300 truncate max-w-[70%]" title={cat.name}>{cat.name}</span>
-                                <div className="flex items-center">
-                                    <div className="w-24 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mr-3">
-                                        <div className="h-full bg-indigo-500" style={{ width: `${(cat.value / totalTickets) * 100}%` }}></div>
-                                    </div>
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{cat.value}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Avg Resolution by Priority */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-2 transition-colors">
-                    <h3 className="text-lg font-semibold mb-6 dark:text-slate-100">Tempo Médio Resolução (Horas) por Prioridade</h3>
-                    <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={avgTimeByPriority} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                                <XAxis type="number" hide />
-                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-                                <RechartsTooltip cursor={{ fill: 'transparent' }} />
-                                <Bar dataKey="hours" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={20} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                {/* By Location */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
-                        <MapPin className="w-5 h-5 mr-2 text-indigo-500" />
-                        Chamados por Localização
-                    </h3>
-                    <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={byLocation}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                                <YAxis />
-                                <RechartsTooltip />
-                                <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Top Departments */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
-                    <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
-                        <Users className="w-5 h-5 mr-2 text-indigo-500" />
-                        Chamados por Departamento
-                    </h3>
-                    <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={topDepartments} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
-                                <XAxis type="number" />
-                                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10 }} />
-                                <RechartsTooltip />
-                                <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
-            {/* Technician Ranking */}
-            <div className="mb-8 min-h-[500px]">
-                <TechnicianRankingList startDate={startDate} endDate={endDate} />
-            </div>
-
-            {/* Department Projects */}
-            <ProjectBoard />
+  return (
+    <div
+      className={`font-sans text-slate-900 dark:text-slate-100 relative transition-colors ${
+        presentationMode
+          ? "bg-slate-50 dark:bg-slate-900 w-screen h-screen overflow-hidden fixed top-0 left-0 z-[100] flex flex-col p-8"
+          : "min-h-screen bg-slate-50 dark:bg-slate-900 p-8"
+      }`}
+    >
+      {/* ALERT MODAL */}
+      {alertConfig.visible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-pulse">
+          <div
+            className={`p-8 rounded-2xl shadow-2xl max-w-lg text-center transform scale-110 transition-transform ${
+              alertConfig.type === "error"
+                ? "bg-red-600 text-white"
+                : "bg-amber-500 text-white"
+            }`}
+          >
+            <AlertTriangle className="w-16 h-16 mx-auto mb-4" />
+            <h2 className="text-4xl font-black mb-2 uppercase">
+              {alertConfig.title}
+            </h2>
+            <p className="text-xl font-bold">{alertConfig.message}</p>
+          </div>
         </div>
-    )
-}
+      )}
 
+      {/* Header */}
+      {presentationMode && (
+        <div className="w-full flex justify-between items-start mb-8 flex-shrink-0">
+          <div>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight flex items-center gap-2">
+              Dashboard de TI
+              <button aria-label="Test Sound" onClick={playAlarm} className="opacity-20 hover:opacity-100 transition-opacity cursor-pointer">
+                <Volume2 className="w-5 h-5 text-slate-400" />
+              </button>
+            </h1>
+            <p className="text-xl font-medium text-slate-500">
+              Indicadores de Desempenho GLPI
+            </p>
+          </div>
+          <div className="flex gap-6 items-center">
+            <span className="text-slate-500 dark:text-slate-400 font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-6 py-3 rounded-full text-lg shadow-sm">
+              Atualiza em: {formatTimeLeft()}
+            </span>
+            <button
+              onClick={togglePresentation}
+              className="p-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors shadow-lg cursor-pointer"
+            >
+              <X className="w-8 h-8" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pagination component logic separated for absolute positioning */}
+      {presentationMode && (
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex space-x-4 bg-white/50 dark:bg-slate-800/50 p-4 rounded-full backdrop-blur-sm shadow-sm z-50">
+          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+            <div
+              key={i}
+              className={`w-4 h-4 rounded-full transition-all duration-300 ${currentSlide === i ? "bg-indigo-600 dark:bg-indigo-500 scale-125" : "bg-slate-300 dark:bg-slate-600"}`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Standard Header */}
+      {!presentationMode && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              Dashboard de TI
+              <button aria-label="Test Sound" onClick={playAlarm} className="opacity-20 hover:opacity-100 transition-opacity cursor-pointer">
+                <Volume2 className="w-4 h-4 text-slate-400" />
+              </button>
+            </h1>
+            <div className="flex items-center space-x-2 mt-1">
+              <p className="text-slate-500">Indicadores de Desempenho GLPI</p>
+              <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full flex items-center">
+                <Clock className="w-3 h-3 mr-1" />
+                Atualiza em {formatTimeLeft()}
+              </span>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4 w-full md:w-auto">
+            {/* Theme and User */}
+            <div className="flex items-center justify-between w-full xl:w-auto gap-4">
+              <ThemeToggle />
+              <button
+                onClick={togglePresentation}
+                className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800/50 transition-colors shadow-sm flex items-center"
+                title="Modo Apresentação (TV)"
+              >
+                <MonitorPlay className="w-5 h-5" />
+              </button>
+              {/* User Menu */}
+              <div className="relative">
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+                >
+                  <div className="bg-indigo-100 p-1 rounded-full">
+                    <UserIcon className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  <div className="text-left hidden sm:block">
+                    <p className="text-xs font-bold text-slate-700 leading-none">
+                      {profile?.full_name || user?.email?.split("@")[0]}
+                    </p>
+                    <p className="text-sm text-slate-400 leading-none uppercase scale-75 origin-left mt-0.5">
+                      {profile?.role === "admin" ? "Administrador" : "Usuário"}
+                    </p>
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-50 animate-in fade-in zoom-in-95 duration-200">
+                    {isAdmin && (
+                      <button
+                        onClick={() => router.push("/admin/users")}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center"
+                      >
+                        <UserPlus className="w-4 h-4 mr-2 text-indigo-600" />
+                        Cadastrar Usuários
+                      </button>
+                    )}
+                    <div className="h-px bg-slate-100 my-1"></div>
+                    <button
+                      onClick={() => signOut()}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sair do Sistema
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Date Filter */}
+            <div className="bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 transition-colors w-full xl:w-auto">
+              <div className="flex items-center justify-between sm:justify-start">
+                <div className="flex items-center">
+                  <Filter className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2" />
+                  <select
+                    className="text-sm border-none bg-transparent font-medium text-slate-600 dark:text-slate-300 focus:ring-0 cursor-pointer outline-none [&>option]:bg-white dark:[&>option]:bg-slate-800 w-full"
+                    onChange={(e) => {
+                      if (e.target.value) setDateRange(e.target.value as any);
+                    }}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      Período Rápido
+                    </option>
+                    <option value="current_month">Mês Atual</option>
+                    <option value="last_month">Mês Anterior</option>
+                    <option value="last_90_days">Últimos 90 dias</option>
+                    <option value="last_year">Ano Anterior</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="hidden sm:block h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
+
+              <div className="flex items-center justify-between sm:justify-start space-x-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-[110px] sm:w-32 [color-scheme:light_dark]"
+                />
+                <span className="text-slate-300 dark:text-slate-500">-</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="text-sm border-none focus:ring-0 text-slate-600 dark:text-slate-300 bg-transparent outline-none w-[110px] sm:w-32 [color-scheme:light_dark]"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* The Rest of the Content */}
+      <div
+        className={`w-full mx-auto transition-all duration-500 ${presentationMode ? "max-w-[1600px] flex-1 flex flex-col justify-center" : "max-w-7xl"}`}
+      >
+        {/* Slide 0: Overview Cards */}
+        {(!presentationMode || currentSlide === 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 animate-in fade-in zoom-in-95 duration-500">
+            {/* New Overdue Card */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 relative overflow-visible group/overdue transition-colors">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                    Chamados Vencidos (Aberto)
+                  </p>
+                  <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                    {overdueCount}
+                  </h3>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <div
+                    className={`p-2 rounded-lg ${overdueCount > 0 ? "bg-red-50 dark:bg-red-900/20" : "bg-green-50 dark:bg-green-900/20"}`}
+                  >
+                    <AlertTriangle
+                      className={`w-5 h-5 ${overdueCount > 0 ? "text-red-500 dark:text-red-400" : "text-green-500 dark:text-green-400"}`}
+                    />
+                  </div>
+                  {overdueList.length > 0 && (
+                    <div className="relative group/info">
+                      <div className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 cursor-help">
+                        <Info className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                      </div>
+                      <div className="absolute right-0 top-full mt-2 w-72 bg-slate-800 dark:bg-slate-700 text-white text-[10px] p-3 rounded-lg shadow-xl z-50 hidden group-hover/info:block max-h-60 overflow-y-auto">
+                        <p className="font-bold border-b border-slate-600 dark:border-slate-500 pb-1 mb-2">
+                          Lista de Vencidos (Top 10)
+                        </p>
+                        <div className="space-y-2">
+                          {overdueList.map((t) => (
+                            <div
+                              key={t.id}
+                              className="border-b border-slate-700/50 dark:border-slate-600/50 pb-1"
+                            >
+                              <div className="flex justify-between font-bold">
+                                <span>#{t.id}</span>
+                                <span className="text-red-300 dark:text-red-400">
+                                  {t.sla_time_limit
+                                    ? format(
+                                        new Date(t.sla_time_limit),
+                                        "dd/MM HH:mm",
+                                      )
+                                    : "-"}
+                                </span>
+                              </div>
+                              <p className="truncate opacity-80">{t.name}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {overdueCount > 0 ? (
+                <div className="flex items-center text-xs text-red-600 font-medium bg-red-50 p-2 rounded-md">
+                  <Clock className="w-3 h-3 mr-1" />
+                  {oldestOverdueTime}
+                </div>
+              ) : (
+                <div className="text-xs text-green-600 font-medium">
+                  Tudo em dia!
+                </div>
+              )}
+            </div>
+
+            <KPICard
+              title="Total de Chamados"
+              value={totalTickets}
+              icon={Layers}
+              trend={ticketTrendLabel}
+              trendUp={ticketGrowth >= 0}
+              tooltip={`Média dos últimos 3 meses: ${avg3Months} chamados`}
+            />
+            <KPICard
+              title="Conformidade SLA"
+              value={`${slaComplianceRate}%`}
+              icon={CheckCircle}
+              goalValue={goals.sla}
+              onGoalChange={(val) => updateGoal("sla", val)}
+              suffix="%"
+            />
+            <KPICard
+              title="Resolução 1º Nível (FCR)"
+              value={`${fcrRate}%`}
+              icon={TrendingUp}
+              description="Resolvido c/ 1 acomp. ou menos"
+              goalValue={goals.fcr}
+              onGoalChange={(val) => updateGoal("fcr", val)}
+              suffix="%"
+            />
+            <KPICard
+              title="Tempo Médio Resolução"
+              value={`${(avgTimeByPriority.reduce((acc, i) => acc + Number(i.hours), 0) / (avgTimeByPriority.length || 1)).toFixed(1)}h`}
+              icon={Clock}
+              goalValue={goals.time}
+              onGoalChange={(val) => updateGoal("time", val)}
+              isTime={true}
+              suffix="h"
+            />
+          </div>
+        )}
+
+        {/* Slide 1: Network Monitor */}
+        {(!presentationMode || currentSlide === 1) && (
+          <div className="animate-in fade-in zoom-in-95 duration-500 mb-8">
+            <NetworkMonitor startDate={startDate} endDate={endDate} />
+          </div>
+        )}
+
+        {/* Slide 2: Main Charts Area */}
+        {(!presentationMode || currentSlide === 2) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 animate-in fade-in zoom-in-95 duration-500">
+            {/* Ticket Evolution */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+              <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
+                <TrendingUp className="w-5 h-5 mr-2 text-indigo-500" />
+                Evolução do Volume de Chamados
+              </h3>
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="#f1f5f9"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <RechartsTooltip
+                      contentStyle={{
+                        borderRadius: "8px",
+                        border: "none",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="count"
+                      stroke="#6366f1"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Status Breakdown */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+              <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
+                <AlertCircle className="w-5 h-5 mr-2 text-indigo-500" />
+                Visão Geral por Status
+              </h3>
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusData}
+                      innerRadius={80}
+                      outerRadius={120}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {statusData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      iconType="circle"
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Slide 3: Secondary Charts */}
+        {(!presentationMode || currentSlide === 3) && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 animate-in fade-in zoom-in-95 duration-500">
+            {/* Top Categories */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-1 transition-colors">
+              <h3 className="text-lg font-semibold mb-4 dark:text-slate-100">
+                Principais Categorias
+              </h3>
+              <div className="space-y-4">
+                {topCategories.map((cat, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <span
+                      className="text-sm text-slate-600 dark:text-slate-300 truncate max-w-[70%]"
+                      title={cat.name}
+                    >
+                      {cat.name}
+                    </span>
+                    <div className="flex items-center">
+                      <div className="w-24 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mr-3">
+                        <div
+                          className="h-full bg-indigo-500"
+                          style={{
+                            width: `${(cat.value / totalTickets) * 100}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                        {cat.value}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Avg Resolution by Priority */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-2 transition-colors">
+              <h3 className="text-lg font-semibold mb-6 dark:text-slate-100">
+                Tempo Médio Resolução (Horas) por Prioridade
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={avgTimeByPriority} layout="vertical">
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      horizontal={true}
+                      vertical={false}
+                    />
+                    <XAxis type="number" hide />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={100}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <RechartsTooltip cursor={{ fill: "transparent" }} />
+                    <Bar
+                      dataKey="hours"
+                      fill="#8b5cf6"
+                      radius={[0, 4, 4, 0]}
+                      barSize={20}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Slide 4: Terciary Charts */}
+        {(!presentationMode || currentSlide === 4) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 animate-in fade-in zoom-in-95 duration-500">
+            {/* By Location */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+              <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
+                <MapPin className="w-5 h-5 mr-2 text-indigo-500" />
+                Chamados por Localização
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={byLocation}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis />
+                    <RechartsTooltip />
+                    <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Top Departments */}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+              <h3 className="text-lg font-semibold mb-6 flex items-center dark:text-slate-100">
+                <Users className="w-5 h-5 mr-2 text-indigo-500" />
+                Chamados por Departamento
+              </h3>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topDepartments} layout="vertical">
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      horizontal={false}
+                      vertical={true}
+                    />
+                    <XAxis type="number" />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={100}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <RechartsTooltip />
+                    <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Slide 5: Technician Ranking */}
+        {(!presentationMode || currentSlide === 5) && (
+          <div className="mb-8 min-h-[500px] animate-in fade-in zoom-in-95 duration-500">
+            <TechnicianRankingList startDate={startDate} endDate={endDate} />
+          </div>
+        )}
+
+        {/* Slide 6: Department Projects */}
+        {(!presentationMode || currentSlide === 6) && (
+          <div className="animate-in fade-in zoom-in-95 duration-500 pb-20">
+            <ProjectBoard />
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
