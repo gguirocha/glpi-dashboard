@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['ping']
+  serverExternalPackages: ['ping'],
 };
 
 export default nextConfig;
