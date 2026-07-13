@@ -364,6 +364,18 @@ export default function Dashboard() {
     };
   });
 
+  // 4b. Top 5 chamados com MAIOR tempo de resolução (dentro do período filtrado)
+  const topResolutionTickets = [...tickets]
+    .filter((t) => t.time_to_resolve > 0)
+    .sort((a, b) => b.time_to_resolve - a.time_to_resolve)
+    .slice(0, 5)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      days: t.time_to_resolve / 86400, // segundos -> dias
+      hours: t.time_to_resolve / 3600, // segundos -> horas
+    }));
+
   // 5. Top Categories
   const categoryCounts = tickets.reduce(
     (acc, t) => {
@@ -935,6 +947,34 @@ export default function Dashboard() {
               onGoalChange={(val) => updateGoal("time", val)}
               isTime={true}
               suffix="h"
+              detailTitle="Top 5 — Maior Tempo de Resolução"
+              detail={
+                topResolutionTickets.length === 0 ? (
+                  <p className="text-slate-400">Sem chamados resolvidos no período.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {topResolutionTickets.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-1.5 last:border-0 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-mono text-indigo-600 dark:text-indigo-400">#{t.id}</span>
+                          <span
+                            className="block truncate max-w-[160px] text-slate-600 dark:text-slate-300"
+                            title={t.name}
+                          >
+                            {t.name}
+                          </span>
+                        </div>
+                        <span className="whitespace-nowrap font-semibold text-slate-800 dark:text-slate-100">
+                          {t.days.toFixed(1)} dias ({Math.round(t.hours)}h)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )
+              }
             />
           </div>
         )}

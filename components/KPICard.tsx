@@ -1,4 +1,4 @@
-import { Edit2 } from "lucide-react";
+import { Edit2, Info } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -18,11 +18,14 @@ interface KPICardProps {
     isTime?: boolean; // If true, Lower is better. If false, Higher is better.
     suffix?: string; // e.g. "%" or "h"
     tooltip?: React.ReactNode;
+    detail?: React.ReactNode; // Conteúdo de um popover que abre ao CLICAR no ícone de info
+    detailTitle?: string; // Cabeçalho do popover de detalhe
 }
 
-export function KPICard({ title, value, description, icon: Icon, trend, trendUp, className, goalValue, onGoalChange, isTime, suffix, ...props }: KPICardProps) {
+export function KPICard({ title, value, description, icon: Icon, trend, trendUp, className, goalValue, onGoalChange, isTime, suffix, detail, detailTitle, ...props }: KPICardProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [tempGoal, setTempGoal] = useState(goalValue?.toString() || "");
+    const [showDetail, setShowDetail] = useState(false);
 
     const handleSave = () => {
         if (onGoalChange && tempGoal) {
@@ -113,6 +116,33 @@ export function KPICard({ title, value, description, icon: Icon, trend, trendUp,
                         <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 text-white text-xs p-2 rounded-lg shadow-xl z-50 hidden group-hover/info:block">
                             {props.tooltip}
                         </div>
+                    </div>
+                )}
+                {detail && (
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => setShowDetail((v) => !v)}
+                            className={cn(
+                                "p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors",
+                                showDetail && "bg-slate-100 dark:bg-slate-700"
+                            )}
+                            title="Ver detalhes"
+                        >
+                            <Info className="w-4 h-4 text-slate-400" />
+                        </button>
+                        {showDetail && (
+                            <>
+                                {/* Backdrop: clique fora fecha o popover */}
+                                <div className="fixed inset-0 z-40" onClick={() => setShowDetail(false)} />
+                                <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs p-3 rounded-lg shadow-2xl z-50">
+                                    {detailTitle && (
+                                        <div className="font-semibold mb-2 text-slate-800 dark:text-slate-100">{detailTitle}</div>
+                                    )}
+                                    {detail}
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
