@@ -106,8 +106,11 @@ export async function GET() {
     );
 
     // 3. Process changes
-    const updates: any[] = [];
+    // IMPORTANTE (orçamento de I/O Supabase free): só escrevemos quando o status
+    // realmente muda. Gravar todos os links a cada chamada gera dead tuples +
+    // autovacuum constante e esgota o burst de I/O do plano free.
     const newEvents: any[] = [];
+    const changedLinks: { id: any; currentStatus: string }[] = [];
 
     for (const res of results) {
       if (res.hasStatusChanged) {
@@ -115,36 +118,30 @@ export async function GET() {
           link_id: res.link.id,
           status: res.currentStatus,
         });
+        changedLinks.push({ id: res.link.id, currentStatus: res.currentStatus });
         console.log(`[Ping] STATUS CHANGED: ${res.link.name} (${res.link.ip_address}) is now ${res.currentStatus.toUpperCase()}`);
       }
-
-      updates.push({
-        id: res.link.id,
-        name: res.link.name,
-        ip_address: res.link.ip_address,
-        last_status: res.currentStatus,
-        last_checked: new Date().toISOString(),
-      });
     }
 
-    // 4. Perform database operations
+    // 4. Perform database operations — apenas para linhas que mudaram
     if (newEvents.length > 0) {
       const { error: eventError } = await supabase
         .from('network_events')
         .insert(newEvents);
-        
+
       if (eventError) {
         console.error('CRON PING: Erro ao inserir novos eventos: ', eventError);
       }
     }
 
-    if (updates.length > 0) {
+    for (const c of changedLinks) {
       const { error: updateError } = await supabase
         .from('network_links')
-        .upsert(updates);
-        
+        .update({ last_status: c.currentStatus, last_checked: new Date().toISOString() })
+        .eq('id', c.id);
+
       if (updateError) {
-         console.error('CRON PING: Erro ao atualizar status dos links: ', updateError);
+        console.error('CRON PING: Erro ao atualizar status do link: ', updateError);
       }
     }
 
