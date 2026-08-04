@@ -13,8 +13,17 @@ import {
     ScheduleConfig,
 } from "@/types";
 
-// Default — Segunda-feira às 08:00 (fuso do servidor)
+// Default — Segunda-feira às 08:00 (fuso do servidor).
+// ATENÇÃO: só é aplicado quando a config foi LIDA COM SUCESSO e não tem schedule.
+// Nunca use este default como fallback de erro de leitura — ver getScheduleConfig().
 export const DEFAULT_SCHEDULE: ScheduleConfig = { dayOfWeek: 1, hour: 8, minute: 0 };
+
+/**
+ * Janela máxima de catch-up após o horário agendado.
+ * Se o servidor estava fora no horário do disparo, ainda disparamos ao voltar —
+ * mas só dentro dessa janela. Sem isso, um restart às 23h dispararia fora de hora.
+ */
+export const CATCHUP_WINDOW_MS = 3 * 60 * 60 * 1000; // 3 horas
 
 // Tipo local — projeto com o status real (joined) carregado
 type ProjectWithStatus = Project & { real_status: ProjectStatus | null };
@@ -140,6 +149,43 @@ async function callGemini(prompt: string, label: string): Promise<string> {
 // ──────────────────────────────────────────────────
 // Builders de prompt
 // ──────────────────────────────────────────────────
+/**
+ * Formata a data limite (coluna DATE, chega como "YYYY-MM-DD").
+ * `new Date("2026-08-10")` é interpretado como UTC e, em America/Sao_Paulo,
+ * volta um dia — por isso ancoramos em meia-noite local antes de formatar.
+ */
+function formatDueDate(due: string | null): string | null {
+    if (!due) return null;
+    const d = new Date(`${due.split("T")[0]}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("pt-BR");
+}
+
+/** Rótulo de prazo para os prompts: "10/08/2026 (atrasado há 3 dias)". */
+function dueLabel(project: ProjectWithStatus): string | null {
+    const formatted = formatDueDate(project.due_date);
+    if (!formatted) return null;
+
+    const due = new Date(`${project.due_date!.split("T")[0]}T00:00:00`);
+
+    // Concluído: o que importa é se entregou dentro do prazo
+    if (project.status === "done" && project.completed_at) {
+        const done = new Date(project.completed_at);
+        done.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((done.getTime() - due.getTime()) / 86_400_000);
+        if (diffDays > 0) return `${formatted} (entregue com ${diffDays} dia(s) de atraso)`;
+        return `${formatted} (entregue dentro do prazo)`;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+
+    if (diffDays < 0) return `${formatted} (ATRASADO há ${Math.abs(diffDays)} dia(s))`;
+    if (diffDays === 0) return `${formatted} (vence HOJE)`;
+    return `${formatted} (faltam ${diffDays} dia(s))`;
+}
+
 function buildIndividualPrompt(project: ProjectWithStatus, weekLabel: string): string {
     const workflowStatus = WORKFLOW_STATUS_LABEL[project.status];
     const realStatus = project.real_status?.name ?? "Não classificado";
@@ -153,6 +199,7 @@ Dados do Projeto:
 - Status real do projeto: ${realStatus}
 - Responsável: ${project.owner ?? "Não informado"}
 - Semana de referência: ${weekLabel}
+${dueLabel(project) ? `- Data limite de entrega: ${dueLabel(project)}` : ""}
 ${project.completed_at ? `- Data de conclusão: ${new Date(project.completed_at).toLocaleDateString("pt-BR")}` : ""}
 
 Atualização da semana (fornecida pelo gestor):
@@ -163,6 +210,7 @@ Instruções OBRIGATÓRIAS:
 - Comece com uma saudação formal: "Prezados,"
 - SEMPRE indique o status do fluxo do projeto de forma destacada no início (AGUARDANDO, EM ANDAMENTO ou CONCLUÍDO)
 - SEMPRE inclua o status real (categoria detalhada) quando disponível
+- Quando houver data limite de entrega, cite-a e comente a situação do prazo (no prazo, próximo do vencimento ou atrasado)
 - Apresente os pontos relevantes da atualização de forma clara e objetiva
 - Indique próximos passos quando houver
 - Finalize com: "Atenciosamente,\\nEquipe de Projetos"
@@ -182,11 +230,14 @@ function buildGeneralPrompt(projects: ProjectWithStatus[], weekLabel: string): s
     const formatProject = (p: ProjectWithStatus): string => {
         const realStatus = p.real_status?.name ?? "Não classificado";
         const ownerLine = p.owner ? `   Responsável: ${p.owner}` : `   Responsável: Não informado`;
+        const due = dueLabel(p);
+        const dueLine = due ? `   Prazo de entrega: ${due}` : "";
         const completedLine = p.completed_at
             ? `   Concluído em: ${new Date(p.completed_at).toLocaleDateString("pt-BR")}`
             : "";
+        const extraLines = [dueLine, completedLine].filter(Boolean).join("\n");
         return `• [${realStatus}] ${p.title}
-${ownerLine}${completedLine ? "\n" + completedLine : ""}
+${ownerLine}${extraLines ? "\n" + extraLines : ""}
    Atualização: ${p.weekly_update ?? "Sem atualização."}`;
     };
 
@@ -220,7 +271,9 @@ ${sections.join("\n\n")}
   * SEMPRE mostre o nome
   * SEMPRE inclua o status real entre colchetes [ex: Em desenvolvimento, Em homologação, Bloqueado, etc]
   * SEMPRE inclua o responsável (ou "Não informado")
+  * SEMPRE cite o prazo de entrega quando houver, sinalizando explicitamente os ATRASADOS
   * Sintetize a atualização da semana em 1-2 frases — NÃO copie o texto literal
+- No sumário executivo, informe quantos projetos estão ATRASADOS em relação ao prazo de entrega
 - Destaque RISCOS, BLOQUEIOS e MARCOS importantes ao longo do texto
 - Encerre com 1-2 linhas de fechamento + "Atenciosamente,\\nEquipe de Projetos"
 - Máximo de 600 palavras
@@ -515,8 +568,39 @@ export async function runGeneralReport(): Promise<GeneralReportResult> {
 // Schedule helpers — usados pelo tick-scheduler do instrumentation.ts
 // ──────────────────────────────────────────────────
 
-/** Lê apenas o schedule configurado (com fallback para o default). */
-export async function getScheduleConfig(): Promise<ScheduleConfig> {
+/**
+ * Valida/normaliza um schedule vindo do JSONB.
+ * O valor pode chegar com números como string (edições manuais no Supabase),
+ * então coagimos e validamos os limites antes de confiar nele.
+ * Retorna null se o valor não descreve um agendamento válido.
+ */
+function normalizeSchedule(raw: unknown): ScheduleConfig | null {
+    if (!raw || typeof raw !== "object") return null;
+    const r = raw as Record<string, unknown>;
+
+    const dayOfWeek = Number(r.dayOfWeek);
+    const hour = Number(r.hour);
+    const minute = Number(r.minute);
+
+    if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) return null;
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+
+    return { dayOfWeek, hour, minute };
+}
+
+/**
+ * Lê o schedule configurado.
+ *
+ * Retorna `null` quando a LEITURA FALHOU — nesse caso o chamador deve pular o
+ * tick, nunca adivinhar. O default só é aplicado quando a leitura deu certo e a
+ * config simplesmente não tem `schedule`.
+ *
+ * Motivo: o fallback silencioso para DEFAULT_SCHEDULE fazia o ciclo disparar em
+ * dia/hora diferentes do configurado sempre que o Supabase dava timeout — que é
+ * frequente no plano free.
+ */
+export async function getScheduleConfig(): Promise<ScheduleConfig | null> {
     const supabase = getSupabase();
     const { data, error } = await supabase
         .from("dashboard_settings")
@@ -525,15 +609,39 @@ export async function getScheduleConfig(): Promise<ScheduleConfig> {
         .maybeSingle();
 
     if (error) {
-        console.warn(`[Schedule] Falha ao ler config (${error.message}) — usando default.`);
+        console.warn(
+            `[Schedule] Falha ao ler config (${error.message}) — tick ignorado (NÃO aplicamos default).`
+        );
+        return null;
+    }
+
+    const cfg = data?.value as GeneralReportConfig | undefined;
+    const normalized = normalizeSchedule(cfg?.schedule);
+
+    if (!normalized) {
+        if (cfg?.schedule !== undefined) {
+            console.warn(
+                `[Schedule] Schedule inválido no banco (${JSON.stringify(cfg.schedule)}) — aplicando default.`
+            );
+        }
         return DEFAULT_SCHEDULE;
     }
-    const cfg = data?.value as GeneralReportConfig | undefined;
-    return cfg?.schedule ?? DEFAULT_SCHEDULE;
+    return normalized;
 }
 
-/** Lê o timestamp da última execução bem-sucedida do ciclo (ou null se nunca rodou). */
-export async function getCycleLastFiredAt(): Promise<Date | null> {
+/** Resultado da leitura do estado do ciclo — distingue "falhou" de "nunca rodou". */
+export type CycleStateRead =
+    | { ok: true; lastFiredAt: Date | null }
+    | { ok: false };
+
+/**
+ * Lê o timestamp da última execução do ciclo.
+ *
+ * `{ ok: false }` significa que NÃO sabemos o estado. O chamador deve pular o
+ * tick (fail-closed). Antes isso virava `null`, que o dedup interpretava como
+ * "nunca disparou" — e reenviava os relatórios.
+ */
+export async function getCycleLastFiredAt(): Promise<CycleStateRead> {
     const supabase = getSupabase();
     const { data, error } = await supabase
         .from("dashboard_settings")
@@ -542,35 +650,81 @@ export async function getCycleLastFiredAt(): Promise<Date | null> {
         .maybeSingle();
 
     if (error) {
-        console.warn(`[Schedule] Falha ao ler cycle_state (${error.message}).`);
-        return null;
+        console.warn(`[Schedule] Falha ao ler cycle_state (${error.message}) — tick ignorado.`);
+        return { ok: false };
     }
+
     const ts = (data?.value as { lastFiredAt?: string } | undefined)?.lastFiredAt;
-    return ts ? new Date(ts) : null;
+    if (!ts) return { ok: true, lastFiredAt: null };
+
+    const parsed = new Date(ts);
+    if (Number.isNaN(parsed.getTime())) {
+        console.warn(`[Schedule] lastFiredAt inválido no banco ("${ts}") — tratando como nunca disparado.`);
+        return { ok: true, lastFiredAt: null };
+    }
+    return { ok: true, lastFiredAt: parsed };
 }
 
-/** Persiste o timestamp da execução para evitar duplo-disparo no mesmo dia. */
-export async function setCycleLastFiredAt(when: Date): Promise<void> {
+/**
+ * Persiste o marcador de disparo. Retorna `true` só se realmente gravou.
+ *
+ * O ciclo NÃO deve rodar sem esse marcador persistido: sem ele o próximo tick
+ * (60s depois) volta a achar que nada foi enviado e reenvia tudo.
+ */
+export async function setCycleLastFiredAt(when: Date): Promise<boolean> {
     const supabase = getSupabase();
-    const { error } = await supabase
-        .from("dashboard_settings")
-        .upsert({
-            key: "weekly_cycle_state",
-            value: { lastFiredAt: when.toISOString() },
-            updated_at: new Date().toISOString(),
-        });
-    if (error) {
-        console.error(`[Schedule] Falha ao persistir lastFiredAt: ${error.message}`);
+    const MAX_ATTEMPTS = 3;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const { error } = await supabase
+            .from("dashboard_settings")
+            .upsert({
+                key: "weekly_cycle_state",
+                value: { lastFiredAt: when.toISOString() },
+                updated_at: new Date().toISOString(),
+            });
+
+        if (!error) return true;
+
+        console.error(
+            `[Schedule] Falha ao persistir lastFiredAt (tentativa ${attempt}/${MAX_ATTEMPTS}): ${error.message}`
+        );
+        if (attempt < MAX_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 1000 * attempt));
+        }
     }
+    return false;
+}
+
+/**
+ * Instante agendado da ocorrência corrente (ex.: "segunda 07:00 desta semana").
+ *
+ * Retorna null se hoje não é o dia agendado ou se o horário ainda não chegou.
+ * Puro — não toca rede. Usa o fuso local do servidor (EC2 = America/Sao_Paulo).
+ */
+export function occurrenceStart(
+    schedule: ScheduleConfig,
+    now: Date = new Date()
+): Date | null {
+    if (now.getDay() !== schedule.dayOfWeek) return null;
+
+    const scheduled = new Date(now);
+    scheduled.setHours(schedule.hour, schedule.minute, 0, 0);
+
+    return now < scheduled ? null : scheduled;
 }
 
 /**
  * Decide se o ciclo deve disparar agora.
  *
  * Regras:
- * - Dia da semana de `now` precisa bater com `schedule.dayOfWeek`
- * - Hora atual >= hora agendada (catch-up dentro do mesmo dia se servidor estava off)
- * - Não pode ter disparado nenhuma vez no mesmo dia calendário (dedup conservador)
+ * - Hoje precisa ser o dia agendado e o horário já ter chegado
+ * - O atraso em relação ao horário agendado não pode passar de CATCHUP_WINDOW_MS
+ * - Não pode já ter disparado NESTA ocorrência (compara instantes, não dias)
+ *
+ * A comparação por instante (`lastFiredAt >= início da ocorrência`) substitui o
+ * antigo "mesmo dia calendário": é estrita, sobrevive a restart e não depende de
+ * aritmética de data.
  *
  * Pura e testável — não toca rede.
  */
@@ -579,19 +733,12 @@ export function shouldFireNow(
     lastFiredAt: Date | null,
     now: Date = new Date()
 ): boolean {
-    if (now.getDay() !== schedule.dayOfWeek) return false;
+    const start = occurrenceStart(schedule, now);
+    if (!start) return false;
 
-    const scheduledToday = new Date(now);
-    scheduledToday.setHours(schedule.hour, schedule.minute, 0, 0);
-    if (now < scheduledToday) return false;
+    if (now.getTime() - start.getTime() > CATCHUP_WINDOW_MS) return false;
 
-    if (lastFiredAt) {
-        const sameDay =
-            lastFiredAt.getFullYear() === now.getFullYear() &&
-            lastFiredAt.getMonth() === now.getMonth() &&
-            lastFiredAt.getDate() === now.getDate();
-        if (sameDay) return false;
-    }
+    if (lastFiredAt && lastFiredAt.getTime() >= start.getTime()) return false;
 
     return true;
 }

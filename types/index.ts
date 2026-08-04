@@ -38,6 +38,8 @@ export interface Project {
     status: 'todo' | 'in_progress' | 'done';
     created_at?: string;
     completed_at: string | null;
+    /** Data limite de entrega (YYYY-MM-DD). null = sem prazo definido. */
+    due_date: string | null;
     // --- Weekly Report Feature ---
     weekly_update: string | null;
     report_emails: string[];

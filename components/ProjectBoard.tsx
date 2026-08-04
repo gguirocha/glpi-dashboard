@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext"
 import { Project, ProjectStatus, GeneralReportConfig, ScheduleConfig } from "@/types"
 import {
     Plus, X, ArrowRight, ArrowLeft, ChevronDown, Mail, Save, User, FileText,
-    Loader2, CheckCircle2, Settings, Tag, Clock, Calendar,
+    Loader2, CheckCircle2, Settings, Tag, Clock, Calendar, CalendarClock, AlertTriangle,
 } from "lucide-react"
 
 // Default — Segunda-feira às 08:00 (espelha o DEFAULT_SCHEDULE do lib/weeklyReport)
@@ -24,6 +24,85 @@ const WEEKDAYS: { value: number; label: string }[] = [
 
 function formatTime(h: number, m: number): string {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+}
+
+// ──────────────────────────────────────────────────
+// Data limite de entrega
+// ──────────────────────────────────────────────────
+
+/**
+ * Converte "YYYY-MM-DD" (coluna DATE) em Date na meia-noite LOCAL.
+ * `new Date("2026-08-10")` é lido como UTC e, no fuso -03, volta um dia.
+ */
+function parseDueDate(due: string | null): Date | null {
+    if (!due) return null
+    const d = new Date(`${due.split("T")[0]}T00:00:00`)
+    return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** Valor aceito pelo <input type="date"> (sempre YYYY-MM-DD). */
+function toDateInputValue(due: string | null): string {
+    return due ? due.split("T")[0] : ""
+}
+
+type DueTone = "neutral" | "warning" | "danger" | "success"
+
+type DueMeta = {
+    label: string
+    tone: DueTone
+    /** true quando o prazo já venceu e o projeto ainda não foi concluído */
+    overdue: boolean
+}
+
+/** Rótulo + severidade do prazo, considerando o status do projeto. */
+function getDueMeta(project: Project): DueMeta | null {
+    const due = parseDueDate(project.due_date)
+    if (!due) return null
+
+    const formatted = due.toLocaleDateString("pt-BR")
+    const DAY_MS = 86_400_000
+
+    // Concluído: comparamos a entrega com o prazo, não com hoje
+    if (project.status === "done") {
+        const completed = project.completed_at ? new Date(project.completed_at) : null
+        if (!completed) return { label: formatted, tone: "neutral", overdue: false }
+        completed.setHours(0, 0, 0, 0)
+        const lateDays = Math.round((completed.getTime() - due.getTime()) / DAY_MS)
+        return lateDays > 0
+            ? { label: `${formatted} · ${lateDays}d de atraso`, tone: "danger", overdue: false }
+            : { label: `${formatted} · no prazo`, tone: "success", overdue: false }
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const diffDays = Math.round((due.getTime() - today.getTime()) / DAY_MS)
+
+    if (diffDays < 0) return { label: `${formatted} · atrasado ${Math.abs(diffDays)}d`, tone: "danger", overdue: true }
+    if (diffDays === 0) return { label: `${formatted} · vence hoje`, tone: "warning", overdue: false }
+    if (diffDays <= 3) return { label: `${formatted} · faltam ${diffDays}d`, tone: "warning", overdue: false }
+    return { label: formatted, tone: "neutral", overdue: false }
+}
+
+const DUE_TONE_CLASS: Record<DueTone, string> = {
+    neutral: "bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600",
+    warning: "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50",
+    danger: "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/50",
+    success: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50",
+}
+
+function DueDateBadge({ project }: { project: Project }) {
+    const meta = getDueMeta(project)
+    if (!meta) return null
+
+    return (
+        <span
+            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${DUE_TONE_CLASS[meta.tone]}`}
+            title={`Data limite de entrega: ${meta.label}`}
+        >
+            {meta.overdue ? <AlertTriangle className="w-2.5 h-2.5" /> : <CalendarClock className="w-2.5 h-2.5" />}
+            {meta.label}
+        </span>
+    )
 }
 
 // ──────────────────────────────────────────────────
@@ -303,6 +382,7 @@ function ProjectEditPanel({
     const [emailInput, setEmailInput] = useState("")
     const [emails, setEmails] = useState<string[]>(project.report_emails ?? [])
     const [realStatusId, setRealStatusId] = useState<number | null>(project.real_status_id ?? null)
+    const [dueDate, setDueDate] = useState<string>(toDateInputValue(project.due_date))
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -318,6 +398,7 @@ function ProjectEditPanel({
         setOwner(project.owner ?? "")
         setEmails(project.report_emails ?? [])
         setRealStatusId(project.real_status_id ?? null)
+        setDueDate(toDateInputValue(project.due_date))
     }, [project])
 
     function addEmail() {
@@ -375,6 +456,7 @@ function ProjectEditPanel({
             report_emails: emails,
             owner: owner.trim() || null,
             real_status_id: realStatusId,
+            due_date: dueDate || null,
         }
 
         try {
@@ -398,6 +480,7 @@ function ProjectEditPanel({
         update !== (project.weekly_update ?? "") ||
         owner !== (project.owner ?? "") ||
         realStatusId !== (project.real_status_id ?? null) ||
+        dueDate !== toDateInputValue(project.due_date) ||
         JSON.stringify(emails) !== JSON.stringify(project.report_emails ?? [])
 
     const currentStatus = statuses.find((s) => s.id === realStatusId)
@@ -425,19 +508,22 @@ function ProjectEditPanel({
                 />
             </button>
 
-            {/* Status real chip — mostrado fora do painel quando há um selecionado */}
-            {!open && currentStatus && (
-                <div className="mt-1.5 flex items-center gap-1">
-                    <span
-                        className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                        style={{
-                            backgroundColor: (currentStatus.color ?? "#6366f1") + "20",
-                            color: currentStatus.color ?? "#6366f1",
-                        }}
-                    >
-                        <Tag className="w-2.5 h-2.5" />
-                        {currentStatus.name}
-                    </span>
+            {/* Chips fora do painel: status real + prazo de entrega */}
+            {!open && (currentStatus || project.due_date) && (
+                <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                    {currentStatus && (
+                        <span
+                            className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                            style={{
+                                backgroundColor: (currentStatus.color ?? "#6366f1") + "20",
+                                color: currentStatus.color ?? "#6366f1",
+                            }}
+                        >
+                            <Tag className="w-2.5 h-2.5" />
+                            {currentStatus.name}
+                        </span>
+                    )}
+                    <DueDateBadge project={project} />
                 </div>
             )}
 
@@ -460,6 +546,38 @@ function ProjectEditPanel({
                                 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100
                                 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                         />
+                    </div>
+
+                    {/* Data limite de entrega */}
+                    <div>
+                        <label className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                            <CalendarClock className="w-3 h-3" />
+                            Data limite de entrega
+                        </label>
+                        <div className="flex gap-1.5">
+                            <input
+                                type="date"
+                                value={dueDate}
+                                onChange={(e) => setDueDate(e.target.value)}
+                                className="flex-1 text-xs border border-slate-200 dark:border-slate-600 rounded-md px-2.5 py-1.5
+                                    bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100
+                                    focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                            />
+                            {dueDate && (
+                                <button
+                                    onClick={() => setDueDate("")}
+                                    className="text-xs bg-slate-100 dark:bg-slate-700 hover:bg-rose-100 dark:hover:bg-rose-900/40
+                                        text-slate-600 dark:text-slate-300 hover:text-rose-700 dark:hover:text-rose-300
+                                        px-2.5 py-1.5 rounded-md transition-colors font-medium"
+                                    title="Remover prazo"
+                                >
+                                    Limpar
+                                </button>
+                            )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            Aparece no card e é citada nos status reports (individual e consolidado).
+                        </p>
                     </div>
 
                     {/* Status real */}
@@ -694,6 +812,7 @@ export function ProjectBoard() {
                     report_emails: [],
                     owner: null,
                     real_status_id: null,
+                    due_date: null,
                 }])
                 .select()
 
@@ -779,15 +898,33 @@ export function ProjectBoard() {
 
     const getSortedProjects = (status: string) => {
         const filtered = projects.filter((p) => p.status === status)
+
         if (status === "done") {
             filtered.sort((a, b) => {
                 const dateA = a.completed_at ? new Date(a.completed_at).getTime() : 0
                 const dateB = b.completed_at ? new Date(b.completed_at).getTime() : 0
                 return dateB - dateA
             })
+            return filtered
         }
+
+        // Pendentes: prazo mais próximo primeiro; sem prazo vai para o fim
+        // (mantendo a ordem de criação que veio do fetch).
+        filtered.sort((a, b) => {
+            const dueA = parseDueDate(a.due_date)?.getTime()
+            const dueB = parseDueDate(b.due_date)?.getTime()
+            if (dueA === undefined && dueB === undefined) return 0
+            if (dueA === undefined) return 1
+            if (dueB === undefined) return -1
+            return dueA - dueB
+        })
         return filtered
     }
+
+    // Projetos pendentes com prazo vencido — sinal de topo do quadro
+    const overdueCount = projects.filter(
+        (p) => p.status !== "done" && getDueMeta(p)?.overdue
+    ).length
 
     const columns = [
         { id: "todo", title: "Ações a serem Realizadas", color: "bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700" },
@@ -800,7 +937,20 @@ export function ProjectBoard() {
     return (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 mb-8 transition-colors">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center justify-between">
-                <span>Gestão de Projetos do Departamento</span>
+                <span className="flex items-center gap-2">
+                    Gestão de Projetos do Departamento
+                    {overdueCount > 0 && (
+                        <span
+                            className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full
+                                bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300
+                                border border-rose-200 dark:border-rose-800/50"
+                            title="Projetos pendentes com data limite de entrega vencida"
+                        >
+                            <AlertTriangle className="w-3 h-3" />
+                            {overdueCount} atrasado{overdueCount > 1 ? "s" : ""}
+                        </span>
+                    )}
+                </span>
                 <div className="flex items-center gap-2">
                     {isAdmin && (
                         <button
