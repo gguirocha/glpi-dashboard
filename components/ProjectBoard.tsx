@@ -45,63 +45,110 @@ function toDateInputValue(due: string | null): string {
     return due ? due.split("T")[0] : ""
 }
 
-type DueTone = "neutral" | "warning" | "danger" | "success"
-
-type DueMeta = {
-    label: string
-    tone: DueTone
+type DueStatus = {
+    /** Complemento curto ao lado da data: "atrasado 5d", "vence hoje", "faltam 3d"... */
+    suffix: string
     /** true quando o prazo já venceu e o projeto ainda não foi concluído */
     overdue: boolean
 }
 
-/** Rótulo + severidade do prazo, considerando o status do projeto. */
-function getDueMeta(project: Project): DueMeta | null {
+/** Situação do deadline, considerando o status do projeto. */
+function getDueStatus(project: Project): DueStatus | null {
     const due = parseDueDate(project.due_date)
     if (!due) return null
 
-    const formatted = due.toLocaleDateString("pt-BR")
     const DAY_MS = 86_400_000
 
     // Concluído: comparamos a entrega com o prazo, não com hoje
     if (project.status === "done") {
         const completed = project.completed_at ? new Date(project.completed_at) : null
-        if (!completed) return { label: formatted, tone: "neutral", overdue: false }
+        if (!completed) return { suffix: "", overdue: false }
         completed.setHours(0, 0, 0, 0)
         const lateDays = Math.round((completed.getTime() - due.getTime()) / DAY_MS)
         return lateDays > 0
-            ? { label: `${formatted} · ${lateDays}d de atraso`, tone: "danger", overdue: false }
-            : { label: `${formatted} · no prazo`, tone: "success", overdue: false }
+            ? { suffix: `entregue ${lateDays}d atrasado`, overdue: false }
+            : { suffix: "entregue no prazo", overdue: false }
     }
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const diffDays = Math.round((due.getTime() - today.getTime()) / DAY_MS)
 
-    if (diffDays < 0) return { label: `${formatted} · atrasado ${Math.abs(diffDays)}d`, tone: "danger", overdue: true }
-    if (diffDays === 0) return { label: `${formatted} · vence hoje`, tone: "warning", overdue: false }
-    if (diffDays <= 3) return { label: `${formatted} · faltam ${diffDays}d`, tone: "warning", overdue: false }
-    return { label: formatted, tone: "neutral", overdue: false }
+    if (diffDays < 0) return { suffix: `atrasado ${Math.abs(diffDays)}d`, overdue: true }
+    if (diffDays === 0) return { suffix: "vence hoje", overdue: false }
+    if (diffDays <= 3) return { suffix: `faltam ${diffDays}d`, overdue: false }
+    return { suffix: `faltam ${diffDays}d`, overdue: false }
 }
 
-const DUE_TONE_CLASS: Record<DueTone, string> = {
-    neutral: "bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600",
-    warning: "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50",
-    danger: "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/50",
-    success: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50",
-}
+/**
+ * Deadline do card — controle interno da equipe (NÃO entra nos status reports).
+ * Fica logo abaixo do título e acima da atualização semanal, sempre em vermelho.
+ * Salva direto no banco ao mudar a data, como o campo de data de conclusão.
+ */
+function DeadlineField({
+    project,
+    onChange,
+}: {
+    project: Project
+    onChange: (project: Project, value: string) => void
+}) {
+    const value = toDateInputValue(project.due_date)
+    const status = getDueStatus(project)
 
-function DueDateBadge({ project }: { project: Project }) {
-    const meta = getDueMeta(project)
-    if (!meta) return null
+    // Sem deadline: placeholder tracejado, mesma anatomia do estado preenchido
+    if (!value) {
+        return (
+            <div
+                className="mb-2 flex items-center gap-1.5 w-max rounded-md border border-dashed px-2 py-1 transition-colors
+                    border-slate-200 dark:border-slate-600 text-slate-400
+                    hover:border-rose-300 dark:hover:border-rose-800/60 hover:text-rose-500 dark:hover:text-rose-400"
+                title="Definir data limite de entrega (deadline interno da equipe)"
+            >
+                <CalendarClock className="w-3 h-3 flex-shrink-0" />
+                <span className="text-[9px] font-bold uppercase tracking-wider">Deadline</span>
+                <input
+                    type="date"
+                    value=""
+                    onChange={(e) => onChange(project, e.target.value)}
+                    className="bg-transparent border-none text-xs p-0 m-0 focus:ring-0 cursor-pointer w-auto text-current"
+                />
+            </div>
+        )
+    }
+
+    const overdue = status?.overdue ?? false
 
     return (
-        <span
-            className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${DUE_TONE_CLASS[meta.tone]}`}
-            title={`Data limite de entrega: ${meta.label}`}
+        <div
+            className={`mb-2 flex items-center gap-1.5 w-max rounded-md border px-2 py-1 transition-colors
+                ${overdue
+                    ? "bg-rose-600 border-rose-700 text-white"
+                    : "bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300"
+                }`}
+            title="Deadline interno da equipe — não é enviado nos status reports"
         >
-            {meta.overdue ? <AlertTriangle className="w-2.5 h-2.5" /> : <CalendarClock className="w-2.5 h-2.5" />}
-            {meta.label}
-        </span>
+            {overdue ? <AlertTriangle className="w-3 h-3 flex-shrink-0" /> : <CalendarClock className="w-3 h-3 flex-shrink-0" />}
+            <span className="text-[9px] font-bold uppercase tracking-wider">Deadline</span>
+            <input
+                type="date"
+                value={value}
+                onChange={(e) => onChange(project, e.target.value)}
+                className={`bg-transparent border-none text-xs font-semibold p-0 m-0 focus:ring-0 cursor-pointer w-auto
+                    ${overdue ? "text-white [color-scheme:dark]" : "text-rose-700 dark:text-rose-300"}`}
+            />
+            {status?.suffix && (
+                <span className={`text-[10px] font-medium ${overdue ? "text-rose-100" : "text-rose-500 dark:text-rose-400"}`}>
+                    · {status.suffix}
+                </span>
+            )}
+            <button
+                onClick={() => onChange(project, "")}
+                className={`ml-0.5 rounded transition-colors ${overdue ? "hover:text-rose-200" : "hover:text-rose-900 dark:hover:text-rose-100"}`}
+                title="Remover deadline"
+            >
+                <X className="w-3 h-3" />
+            </button>
+        </div>
     )
 }
 
@@ -382,7 +429,6 @@ function ProjectEditPanel({
     const [emailInput, setEmailInput] = useState("")
     const [emails, setEmails] = useState<string[]>(project.report_emails ?? [])
     const [realStatusId, setRealStatusId] = useState<number | null>(project.real_status_id ?? null)
-    const [dueDate, setDueDate] = useState<string>(toDateInputValue(project.due_date))
     const [saving, setSaving] = useState(false)
     const [saved, setSaved] = useState(false)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -398,7 +444,6 @@ function ProjectEditPanel({
         setOwner(project.owner ?? "")
         setEmails(project.report_emails ?? [])
         setRealStatusId(project.real_status_id ?? null)
-        setDueDate(toDateInputValue(project.due_date))
     }, [project])
 
     function addEmail() {
@@ -456,7 +501,6 @@ function ProjectEditPanel({
             report_emails: emails,
             owner: owner.trim() || null,
             real_status_id: realStatusId,
-            due_date: dueDate || null,
         }
 
         try {
@@ -480,7 +524,6 @@ function ProjectEditPanel({
         update !== (project.weekly_update ?? "") ||
         owner !== (project.owner ?? "") ||
         realStatusId !== (project.real_status_id ?? null) ||
-        dueDate !== toDateInputValue(project.due_date) ||
         JSON.stringify(emails) !== JSON.stringify(project.report_emails ?? [])
 
     const currentStatus = statuses.find((s) => s.id === realStatusId)
@@ -508,22 +551,19 @@ function ProjectEditPanel({
                 />
             </button>
 
-            {/* Chips fora do painel: status real + prazo de entrega */}
-            {!open && (currentStatus || project.due_date) && (
-                <div className="mt-1.5 flex items-center gap-1 flex-wrap">
-                    {currentStatus && (
-                        <span
-                            className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                            style={{
-                                backgroundColor: (currentStatus.color ?? "#6366f1") + "20",
-                                color: currentStatus.color ?? "#6366f1",
-                            }}
-                        >
-                            <Tag className="w-2.5 h-2.5" />
-                            {currentStatus.name}
-                        </span>
-                    )}
-                    <DueDateBadge project={project} />
+            {/* Status real chip — mostrado fora do painel quando há um selecionado */}
+            {!open && currentStatus && (
+                <div className="mt-1.5 flex items-center gap-1">
+                    <span
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                        style={{
+                            backgroundColor: (currentStatus.color ?? "#6366f1") + "20",
+                            color: currentStatus.color ?? "#6366f1",
+                        }}
+                    >
+                        <Tag className="w-2.5 h-2.5" />
+                        {currentStatus.name}
+                    </span>
                 </div>
             )}
 
@@ -548,37 +588,6 @@ function ProjectEditPanel({
                         />
                     </div>
 
-                    {/* Data limite de entrega */}
-                    <div>
-                        <label className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                            <CalendarClock className="w-3 h-3" />
-                            Data limite de entrega
-                        </label>
-                        <div className="flex gap-1.5">
-                            <input
-                                type="date"
-                                value={dueDate}
-                                onChange={(e) => setDueDate(e.target.value)}
-                                className="flex-1 text-xs border border-slate-200 dark:border-slate-600 rounded-md px-2.5 py-1.5
-                                    bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100
-                                    focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                            />
-                            {dueDate && (
-                                <button
-                                    onClick={() => setDueDate("")}
-                                    className="text-xs bg-slate-100 dark:bg-slate-700 hover:bg-rose-100 dark:hover:bg-rose-900/40
-                                        text-slate-600 dark:text-slate-300 hover:text-rose-700 dark:hover:text-rose-300
-                                        px-2.5 py-1.5 rounded-md transition-colors font-medium"
-                                    title="Remover prazo"
-                                >
-                                    Limpar
-                                </button>
-                            )}
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1">
-                            Aparece no card e é citada nos status reports (individual e consolidado).
-                        </p>
-                    </div>
 
                     {/* Status real */}
                     <div>
@@ -888,6 +897,24 @@ export function ProjectBoard() {
         }
     }
 
+    /** Deadline salva na hora (sem passar pelo painel de atualização semanal). */
+    async function updateDueDate(project: Project, dateStr: string) {
+        const value = dateStr || null
+        try {
+            const { error } = await supabase
+                .from("dashboard_projects")
+                .update({ due_date: value })
+                .eq("id", project.id)
+
+            if (error) throw error
+            setProjects(projects.map((p) =>
+                p.id === project.id ? { ...p, due_date: value } : p
+            ))
+        } catch (error) {
+            console.error("Error updating due date:", error)
+        }
+    }
+
     function handleProjectPatch(id: number, patch: Partial<Project>) {
         setProjects(projects.map((p) => (p.id === id ? { ...p, ...patch } : p)))
     }
@@ -921,9 +948,9 @@ export function ProjectBoard() {
         return filtered
     }
 
-    // Projetos pendentes com prazo vencido — sinal de topo do quadro
+    // Projetos pendentes com deadline vencido — sinal de topo do quadro
     const overdueCount = projects.filter(
-        (p) => p.status !== "done" && getDueMeta(p)?.overdue
+        (p) => p.status !== "done" && getDueStatus(p)?.overdue
     ).length
 
     const columns = [
@@ -1034,6 +1061,9 @@ export function ProjectBoard() {
                                             <X className="w-4 h-4" />
                                         </button>
                                     </div>
+
+                                    {/* Deadline — interno da equipe, entre o título e a atualização semanal */}
+                                    <DeadlineField project={project} onChange={updateDueDate} />
 
                                     {project.completed_at && project.status === "done" && (
                                         <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 font-medium flex items-center gap-1 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded p-1 -ml-1 w-max">

@@ -149,42 +149,9 @@ async function callGemini(prompt: string, label: string): Promise<string> {
 // ──────────────────────────────────────────────────
 // Builders de prompt
 // ──────────────────────────────────────────────────
-/**
- * Formata a data limite (coluna DATE, chega como "YYYY-MM-DD").
- * `new Date("2026-08-10")` é interpretado como UTC e, em America/Sao_Paulo,
- * volta um dia — por isso ancoramos em meia-noite local antes de formatar.
- */
-function formatDueDate(due: string | null): string | null {
-    if (!due) return null;
-    const d = new Date(`${due.split("T")[0]}T00:00:00`);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleDateString("pt-BR");
-}
-
-/** Rótulo de prazo para os prompts: "10/08/2026 (atrasado há 3 dias)". */
-function dueLabel(project: ProjectWithStatus): string | null {
-    const formatted = formatDueDate(project.due_date);
-    if (!formatted) return null;
-
-    const due = new Date(`${project.due_date!.split("T")[0]}T00:00:00`);
-
-    // Concluído: o que importa é se entregou dentro do prazo
-    if (project.status === "done" && project.completed_at) {
-        const done = new Date(project.completed_at);
-        done.setHours(0, 0, 0, 0);
-        const diffDays = Math.round((done.getTime() - due.getTime()) / 86_400_000);
-        if (diffDays > 0) return `${formatted} (entregue com ${diffDays} dia(s) de atraso)`;
-        return `${formatted} (entregue dentro do prazo)`;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000);
-
-    if (diffDays < 0) return `${formatted} (ATRASADO há ${Math.abs(diffDays)} dia(s))`;
-    if (diffDays === 0) return `${formatted} (vence HOJE)`;
-    return `${formatted} (faltam ${diffDays} dia(s))`;
-}
+// NOTA: `due_date` (deadline) é controle INTERNO da equipe e NÃO entra em
+// nenhum status report — nem no individual, nem no consolidado. Não adicione
+// o campo aos prompts abaixo.
 
 function buildIndividualPrompt(project: ProjectWithStatus, weekLabel: string): string {
     const workflowStatus = WORKFLOW_STATUS_LABEL[project.status];
@@ -199,7 +166,6 @@ Dados do Projeto:
 - Status real do projeto: ${realStatus}
 - Responsável: ${project.owner ?? "Não informado"}
 - Semana de referência: ${weekLabel}
-${dueLabel(project) ? `- Data limite de entrega: ${dueLabel(project)}` : ""}
 ${project.completed_at ? `- Data de conclusão: ${new Date(project.completed_at).toLocaleDateString("pt-BR")}` : ""}
 
 Atualização da semana (fornecida pelo gestor):
@@ -210,7 +176,6 @@ Instruções OBRIGATÓRIAS:
 - Comece com uma saudação formal: "Prezados,"
 - SEMPRE indique o status do fluxo do projeto de forma destacada no início (AGUARDANDO, EM ANDAMENTO ou CONCLUÍDO)
 - SEMPRE inclua o status real (categoria detalhada) quando disponível
-- Quando houver data limite de entrega, cite-a e comente a situação do prazo (no prazo, próximo do vencimento ou atrasado)
 - Apresente os pontos relevantes da atualização de forma clara e objetiva
 - Indique próximos passos quando houver
 - Finalize com: "Atenciosamente,\\nEquipe de Projetos"
@@ -230,14 +195,11 @@ function buildGeneralPrompt(projects: ProjectWithStatus[], weekLabel: string): s
     const formatProject = (p: ProjectWithStatus): string => {
         const realStatus = p.real_status?.name ?? "Não classificado";
         const ownerLine = p.owner ? `   Responsável: ${p.owner}` : `   Responsável: Não informado`;
-        const due = dueLabel(p);
-        const dueLine = due ? `   Prazo de entrega: ${due}` : "";
         const completedLine = p.completed_at
             ? `   Concluído em: ${new Date(p.completed_at).toLocaleDateString("pt-BR")}`
             : "";
-        const extraLines = [dueLine, completedLine].filter(Boolean).join("\n");
         return `• [${realStatus}] ${p.title}
-${ownerLine}${extraLines ? "\n" + extraLines : ""}
+${ownerLine}${completedLine ? "\n" + completedLine : ""}
    Atualização: ${p.weekly_update ?? "Sem atualização."}`;
     };
 
@@ -271,9 +233,7 @@ ${sections.join("\n\n")}
   * SEMPRE mostre o nome
   * SEMPRE inclua o status real entre colchetes [ex: Em desenvolvimento, Em homologação, Bloqueado, etc]
   * SEMPRE inclua o responsável (ou "Não informado")
-  * SEMPRE cite o prazo de entrega quando houver, sinalizando explicitamente os ATRASADOS
   * Sintetize a atualização da semana em 1-2 frases — NÃO copie o texto literal
-- No sumário executivo, informe quantos projetos estão ATRASADOS em relação ao prazo de entrega
 - Destaque RISCOS, BLOQUEIOS e MARCOS importantes ao longo do texto
 - Encerre com 1-2 linhas de fechamento + "Atenciosamente,\\nEquipe de Projetos"
 - Máximo de 600 palavras
