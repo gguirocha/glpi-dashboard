@@ -3,19 +3,23 @@ export interface Ticket {
     name: string;
     date_creation: string;
     date_solved: string | null;
-    date_closed: string | null;
     status_id: number;
     status_label: string;
-    priority_id: number;
     priority_label: string;
     category_name: string | null;
     location_name: string | null;
     department_name: string | null;
     time_to_resolve: number;
-    slas_id_ttr: number;
     is_sla_violated: boolean;
     count_cless_one_hour: boolean; // FCR match
     sla_time_limit: string | null; // Deadline
+    /** Cursor do fetch incremental — ver lib/tickets.ts */
+    last_updated: string | null;
+    // Colunas que existem na tabela mas NÃO são buscadas (nenhuma tela usa).
+    // Opcionais para não voltarem por acidente ao select — ver TICKET_COLUMNS.
+    date_closed?: string | null;
+    priority_id?: number;
+    slas_id_ttr?: number;
 }
 
 export type GroupedData = {

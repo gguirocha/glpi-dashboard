@@ -16,7 +16,12 @@ export function TechnicianRankingList({ startDate, endDate }: TechnicianRankingP
 
     useEffect(() => {
         fetchRanking()
-        const interval = setInterval(fetchRanking, 300000) // 5 minutes refresh
+        // O ranking já vem agregado do servidor (RPC get_technician_ranking) —
+        // trafega uma linha por técnico, não os chamados. Pausa com a aba oculta.
+        const interval = setInterval(() => {
+            if (document.visibilityState !== "visible") return
+            fetchRanking()
+        }, 300000) // 5 minutes refresh
         return () => clearInterval(interval)
     }, [startDate, endDate])
 

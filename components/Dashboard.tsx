@@ -1,15 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { Ticket } from "@/types";
+import {
+  DateWindow,
+  EPOCH_CURSOR,
+  REFRESH_INTERVAL_MS,
+  RECONCILE_INTERVAL_MS,
+  fetchTicketsFull,
+  fetchTicketsDelta,
+  fetchTicketCount,
+  fetchTicketIds,
+  mergeTickets,
+  maxLastUpdated,
+  readTicketsCache,
+  writeTicketsCache,
+} from "@/lib/tickets";
 import { KPICard } from "./KPICard";
 import { ProjectBoard } from "./ProjectBoard";
 import { TechnicianRankingList } from "./TechnicianRanking";
 import { ThemeToggle } from "./ThemeToggle";
-import { NetworkMonitor } from "./NetworkMonitor";
 import {
   BarChart3,
   Clock,
@@ -73,6 +86,9 @@ const COLORS = [
   "#ec4899",
 ];
 
+/** Contador visível no header — espelha o intervalo real do poll. */
+const REFRESH_SECONDS = Math.max(1, Math.round(REFRESH_INTERVAL_MS / 1000));
+
 export default function Dashboard() {
   const { user, profile, isAdmin, isLoading: authLoading, signOut } = useAuth();
   const router = useRouter();
@@ -91,7 +107,8 @@ export default function Dashboard() {
   // I will return the original code as no valid, new code to insert was provided.
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [previousTickets, setPreviousTickets] = useState<Ticket[]>([]);
+  // Só o TOTAL do mês anterior — as linhas nunca são baixadas (ver lib/tickets.ts)
+  const [prevTotalTickets, setPrevTotalTickets] = useState(0);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(
     format(startOfMonth(new Date()), "yyyy-MM-dd"),
@@ -101,7 +118,7 @@ export default function Dashboard() {
   );
 
   // Refresh Timer & Goals State
-  const [timeLeft, setTimeLeft] = useState(300);
+  const [timeLeft, setTimeLeft] = useState(REFRESH_SECONDS);
   const [goals, setGoals] = useState({ sla: 90, fcr: 80, time: 4 });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [overdueList, setOverdueList] = useState<any[]>([]);
@@ -126,7 +143,7 @@ export default function Dashboard() {
     let interval: NodeJS.Timeout;
     if (presentationMode) {
       interval = setInterval(() => {
-        setCurrentSlide((prev) => (prev + 1) % 7); // 7 slides: 0 to 6
+        setCurrentSlide((prev) => (prev + 1) % 6); // 6 slides: 0 to 5
       }, 7000);
     }
     return () => clearInterval(interval);
@@ -164,82 +181,201 @@ export default function Dashboard() {
     localStorage.setItem("dashboard_goals", JSON.stringify(newGoals));
   };
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          fetchTickets();
-          return 300;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [startDate, endDate]);
-
   const formatTimeLeft = () => {
     const m = Math.floor(timeLeft / 60);
     const s = timeLeft % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  useEffect(() => {
-    fetchTickets();
+  // ──────────────────────────────────────────────────────────────────────────
+  // CARGA DE TICKETS — fetch completo 1x por janela, depois só o delta.
+  //
+  // ⚠️  EGRESS: o modelo antigo refazia `select('*')` das duas janelas a cada
+  // 5 min (~575 KB por ciclo) e foi o que estourou o plano do Supabase.
+  // Ver lib/tickets.ts. Nunca voltar a chamar select('*') aqui.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  const currentWindow = useMemo<DateWindow>(
+    () => ({ start: startDate, end: endDate }),
+    [startDate, endDate],
+  );
+
+  // Comparação: SEMPRE o mês anterior completo relativo ao início do filtro.
+  // Ex.: início 05/02/2026 -> compara com 01/01/2026 a 31/01/2026.
+  // null quando o usuário digitou uma data inválida (evita crash).
+  const previousWindow = useMemo<DateWindow | null>(() => {
+    const start = parseISO(startDate);
+    const end = parseISO(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+
+    const prevMonthDate = subMonths(start, 1);
+    return {
+      start: format(startOfMonth(prevMonthDate), "yyyy-MM-dd"),
+      end: format(endOfMonth(prevMonthDate), "yyyy-MM-dd"),
+    };
   }, [startDate, endDate]);
 
-  async function fetchTickets() {
-    setLoading(true);
+  // Refs: o poll em background lê o estado atual sem precisar se recriar a cada
+  // render (e sem capturar estado velho no closure do setInterval).
+  const ticketsRef = useRef<Ticket[]>([]);
+  const prevTotalRef = useRef(0);
+  const lastSeenRef = useRef<string | null>(null);
+  const windowsRef = useRef<{ current: DateWindow; previous: DateWindow } | null>(null);
+  const inFlightRef = useRef(false);
+
+  const persistCache = useCallback(() => {
+    const w = windowsRef.current;
+    if (!w) return;
+    writeTicketsCache(w.current, w.previous, {
+      tickets: ticketsRef.current,
+      prevTotal: prevTotalRef.current,
+      lastSeen: lastSeenRef.current,
+    });
+  }, []);
+
+  /**
+   * Busca só o que mudou desde o maior `last_updated` já visto, mais a contagem
+   * do mês anterior (head request — corpo vazio).
+   */
+  const refreshDelta = useCallback(async () => {
+    const w = windowsRef.current;
+    const since = lastSeenRef.current;
+    if (!w || !since || inFlightRef.current) return;
+
+    inFlightRef.current = true;
     try {
-      // 1. Current Period
-      const currentReq = supabase
-        .from("dashboard_tickets")
-        .select("*")
-        .gte("date_creation", `${startDate}T00:00:00`)
-        .lte("date_creation", `${endDate}T23:59:59`);
+      const [delta, prevTotal] = await Promise.all([
+        fetchTicketsDelta(w.current, since),
+        fetchTicketCount(w.previous),
+      ]);
 
-      // 2. Comparison Period logic
-      // 2. Comparison Period logic
-      const start = parseISO(startDate);
-      const end = parseISO(endDate);
+      if (prevTotal !== prevTotalRef.current) {
+        prevTotalRef.current = prevTotal;
+        setPrevTotalTickets(prevTotal);
+      }
 
-      // Validate dates manually typed by user
-      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        // Stop fetching if dates are invalid to prevent crash
+      // Caso comum: nada mudou -> resposta vazia, nenhum re-render.
+      if (delta.length === 0) return;
+
+      const merged = mergeTickets(ticketsRef.current, delta);
+      ticketsRef.current = merged;
+      setTickets(merged);
+
+      lastSeenRef.current = maxLastUpdated(delta, since);
+      persistCache();
+    } catch (err) {
+      console.error("Erro no refresh incremental de tickets:", err);
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [persistCache]);
+
+  /**
+   * `last_updated` não enxerga linha deletada. 1x por hora conferimos só os ids
+   * da janela (payload minúsculo) e removemos do estado o que sumiu.
+   */
+  const reconcileDeletions = useCallback(async () => {
+    const w = windowsRef.current;
+    if (!w) return;
+
+    try {
+      const ids = await fetchTicketIds(w.current);
+      const kept = ticketsRef.current.filter((t) => ids.has(t.id));
+
+      if (kept.length !== ticketsRef.current.length) {
+        ticketsRef.current = kept;
+        setTickets(kept);
+        persistCache();
+      }
+    } catch (err) {
+      console.error("Erro na reconciliação de tickets deletados:", err);
+    }
+  }, [persistCache]);
+
+  // Carga da janela: usa o cache local se houver, senão faz o fetch completo.
+  useEffect(() => {
+    if (!previousWindow) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    windowsRef.current = { current: currentWindow, previous: previousWindow };
+
+    (async () => {
+      const cached = readTicketsCache(currentWindow, previousWindow);
+      if (cached) {
+        ticketsRef.current = cached.tickets;
+        prevTotalRef.current = cached.prevTotal;
+        lastSeenRef.current = cached.lastSeen ?? EPOCH_CURSOR;
+        setTickets(cached.tickets);
+        setPrevTotalTickets(cached.prevTotal);
         setLoading(false);
+        void refreshDelta(); // pega o que mudou desde o último acesso
         return;
       }
 
-      // Logic: ALWAYS compare against the FULL previous month relative to the start date
-      // Example: Start 01/01/2026 -> Compare with Full Dec 2025 (01/12/2025 - 31/12/2025)
-      // Example: Start 05/02/2026 -> Compare with Full Jan 2026 (01/01/2026 - 31/01/2026)
+      setLoading(true);
+      try {
+        const [curr, prevTotal] = await Promise.all([
+          fetchTicketsFull(currentWindow),
+          fetchTicketCount(previousWindow),
+        ]);
+        if (cancelled) return;
 
-      const prevMonthDate = subMonths(start, 1);
-      const prevStart = startOfMonth(prevMonthDate);
-      const prevEnd = endOfMonth(prevMonthDate);
+        ticketsRef.current = curr;
+        prevTotalRef.current = prevTotal;
+        lastSeenRef.current = maxLastUpdated(curr, null) ?? EPOCH_CURSOR;
+        setTickets(curr);
+        setPrevTotalTickets(prevTotal);
+        persistCache();
+      } catch (err) {
+        console.error("Error fetching tickets:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
-      const formattedPrevStart = format(prevStart, "yyyy-MM-dd");
-      const formattedPrevEnd = format(prevEnd, "yyyy-MM-dd");
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWindow, previousWindow, refreshDelta, persistCache]);
 
-      const prevReq = supabase
-        .from("dashboard_tickets")
-        .select("*")
-        .gte("date_creation", `${formattedPrevStart}T00:00:00`)
-        .lte("date_creation", `${formattedPrevEnd}T23:59:59`);
+  // Poll em background — substitui o refresh de página inteira.
+  // Aba oculta não consome egress.
+  useEffect(() => {
+    const poll = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refreshDelta();
+    }, REFRESH_INTERVAL_MS);
 
-      const [currRes, prevRes] = await Promise.all([currentReq, prevReq]);
+    const reconcile = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void reconcileDeletions();
+    }, RECONCILE_INTERVAL_MS);
 
-      if (currRes.error) throw currRes.error;
-      if (prevRes.error) throw prevRes.error;
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      setTimeLeft(REFRESH_SECONDS);
+      void refreshDelta();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
-      if (currRes.data) setTickets(currRes.data as unknown as Ticket[]);
-      if (prevRes.data) setPreviousTickets(prevRes.data as unknown as Ticket[]);
-    } catch (err) {
-      console.error("Error fetching tickets:", err);
-    } finally {
-      setLoading(false);
-    }
-    // Date shortcuts
-  }
+    return () => {
+      clearInterval(poll);
+      clearInterval(reconcile);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refreshDelta, reconcileDeletions]);
+
+  // Contador do header (cosmético). Congela junto com o poll na aba oculta.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      setTimeLeft((prev) => (prev <= 1 ? REFRESH_SECONDS : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const setDateRange = (
     range: "current_month" | "last_month" | "last_90_days" | "last_year",
@@ -268,7 +404,6 @@ export default function Dashboard() {
   };
 
   const totalTickets = tickets.length;
-  const prevTotalTickets = previousTickets.length;
 
   const ticketGrowth =
     prevTotalTickets > 0
@@ -498,8 +633,11 @@ export default function Dashboard() {
 
     fetchOverdue();
     fetchAvg3Months();
-    // Poll every 5 minutes to keep this specific counter fresh too
+    // Poll every 5 minutes to keep this specific counter fresh too.
+    // Estes já são agregados no servidor (count exact + head, e limit(10)) —
+    // não trafegam linhas. Mesmo assim pausam com a aba oculta.
     const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       fetchOverdue();
       fetchAvg3Months();
     }, 300000);
@@ -528,10 +666,9 @@ export default function Dashboard() {
   };
   // We need state to force re-render if we want to show/hide, but refs for checking logic safely.
   // Let's rely on standard variables outside component or refs inside.
-  const alertTimers = useState<{ near: number; excessive: number; network: number }>({
+  const alertTimers = useState<{ near: number; excessive: number }>({
     near: 0,
     excessive: 0,
-    network: 0,
   }); // Using state to persist? No, refs are better.
 
   // SOUND - Base64 simple alarm beep
@@ -614,36 +751,8 @@ export default function Dashboard() {
         }
       }
 
-      // 3. Check Network Links (Offline) - Every 5 min (300000 ms)
-      if (now - alertTimers[0].network > 300000) {
-        try {
-          const { data: downLinks } = await supabase
-            .from("network_links")
-            .select("name")
-            .eq("last_status", "down");
-
-          if (downLinks && downLinks.length > 0) {
-            const linkNames = downLinks.map(l => l.name).join(", ");
-            setAlertConfig({
-              visible: true,
-              title: "ALERTA DE INFRAESTRUTURA",
-              message: `Link(s) de Internet OFFLINE: ${linkNames}. Verifique imediatamente!`,
-              type: "error",
-            });
-            playAlarm();
-            alertTimers[1]((prev) => ({ ...prev, network: now }));
-
-            setTimeout(
-              () => setAlertConfig((prev) => ({ ...prev, visible: false })),
-              4000,
-            );
-          }
-        } catch (err) {
-          console.error("Error checking network links:", err);
-        }
-      }
     };
-    
+
     checkAlerts(); // Run immediately on mount or dependency change (guarded by timers)
     const interval = setInterval(checkAlerts, 60000); // Check every minute
     return () => clearInterval(interval);
@@ -712,7 +821,7 @@ export default function Dashboard() {
       {/* Pagination component logic separated for absolute positioning */}
       {presentationMode && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex space-x-4 bg-white/50 dark:bg-slate-800/50 p-4 rounded-full backdrop-blur-sm shadow-sm z-50">
-          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
               className={`w-4 h-4 rounded-full transition-all duration-300 ${currentSlide === i ? "bg-indigo-600 dark:bg-indigo-500 scale-125" : "bg-slate-300 dark:bg-slate-600"}`}
@@ -979,15 +1088,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Slide 1: Network Monitor */}
+        {/* Slide 1: Main Charts Area */}
         {(!presentationMode || currentSlide === 1) && (
-          <div className="animate-in fade-in zoom-in-95 duration-500 mb-8">
-            <NetworkMonitor startDate={startDate} endDate={endDate} />
-          </div>
-        )}
-
-        {/* Slide 2: Main Charts Area */}
-        {(!presentationMode || currentSlide === 2) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 animate-in fade-in zoom-in-95 duration-500">
             {/* Ticket Evolution */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
@@ -1066,8 +1168,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Slide 3: Secondary Charts */}
-        {(!presentationMode || currentSlide === 3) && (
+        {/* Slide 2: Secondary Charts */}
+        {(!presentationMode || currentSlide === 2) && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 animate-in fade-in zoom-in-95 duration-500">
             {/* Top Categories */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-1 transition-colors">
@@ -1135,8 +1237,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Slide 4: Terciary Charts */}
-        {(!presentationMode || currentSlide === 4) && (
+        {/* Slide 3: Terciary Charts */}
+        {(!presentationMode || currentSlide === 3) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 animate-in fade-in zoom-in-95 duration-500">
             {/* By Location */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
@@ -1187,15 +1289,15 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Slide 5: Technician Ranking */}
-        {(!presentationMode || currentSlide === 5) && (
+        {/* Slide 4: Technician Ranking */}
+        {(!presentationMode || currentSlide === 4) && (
           <div className="mb-8 min-h-[500px] animate-in fade-in zoom-in-95 duration-500">
             <TechnicianRankingList startDate={startDate} endDate={endDate} />
           </div>
         )}
 
-        {/* Slide 6: Department Projects */}
-        {(!presentationMode || currentSlide === 6) && (
+        {/* Slide 5: Department Projects */}
+        {(!presentationMode || currentSlide === 5) && (
           <div className="animate-in fade-in zoom-in-95 duration-500 pb-20">
             <ProjectBoard />
           </div>
