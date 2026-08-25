@@ -60,9 +60,24 @@ export type DateWindow = { start: string; end: string };
  */
 export const EPOCH_CURSOR = "1970-01-01T00:00:00Z";
 
+/**
+ * Limites da janela convertidos para UTC.
+ *
+ * `date_creation` no Supabase é UTC REAL desde 25/08/2026 — antes o sync do n8n
+ * gravava o relógio local do GLPI rotulado como UTC, e o erro se cancelava com
+ * a string ingênua usada aqui. Agora não cancela mais: mandar
+ * `2026-08-25T00:00:00` faria o PostgREST ler como UTC e o dia sairia 3h
+ * deslocado (chamado aberto às 22h cairia no dia seguinte).
+ *
+ * `new Date("YYYY-MM-DDTHH:mm:ss")` sem sufixo de fuso é interpretado como hora
+ * LOCAL pelo JS, então o toISOString() abaixo dá a borda exata do dia do
+ * usuário.
+ */
 function applyWindow<T>(query: T, w: DateWindow): T {
+    const start = new Date(`${w.start}T00:00:00`).toISOString();
+    const end = new Date(`${w.end}T23:59:59.999`).toISOString();
     // @ts-expect-error — encadeamento do PostgrestFilterBuilder
-    return query.gte("date_creation", `${w.start}T00:00:00`).lte("date_creation", `${w.end}T23:59:59`);
+    return query.gte("date_creation", start).lte("date_creation", end);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -152,8 +167,25 @@ export function maxLastUpdated(list: Ticket[], fallback: string | null): string 
 // Cache local — evita refetch completo a cada F5
 // ──────────────────────────────────────────────────────────────────────────────
 
-const CACHE_PREFIX = "glpi_tickets_v1_";
+/**
+ * v2: os timestamps passaram a ser UTC real (25/08/2026). Um cache v1 guarda
+ * datas 3h deslocadas e um cursor na convenção antiga, então tem que ser
+ * descartado — não dá para migrar linha a linha.
+ */
+const CACHE_PREFIX = "glpi_tickets_v2_";
+const LEGACY_PREFIXES = ["glpi_tickets_v1_"];
 const MAX_CACHED_WINDOWS = 4;
+
+/** Limpa caches de versões anteriores (uma vez, no primeiro acesso). */
+function dropLegacyCache(): void {
+    if (typeof window === "undefined") return;
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && LEGACY_PREFIXES.some((p) => k.startsWith(p))) stale.push(k);
+    }
+    for (const k of stale) localStorage.removeItem(k);
+}
 
 export type CachedWindow = {
     tickets: Ticket[];
@@ -179,6 +211,7 @@ function ourKeys(): string[] {
 export function readTicketsCache(current: DateWindow, previous: DateWindow): CachedWindow | null {
     if (typeof window === "undefined") return null;
     try {
+        dropLegacyCache();
         const raw = localStorage.getItem(cacheKey(current, previous));
         if (!raw) return null;
         const parsed = JSON.parse(raw) as CachedWindow;

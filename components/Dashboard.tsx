@@ -565,9 +565,12 @@ export default function Dashboard() {
   });
 
   // 8. Trend (Daily)
+  // `date_creation` é UTC real; o dia tem que ser o LOCAL, senão tudo que foi
+  // aberto depois das 21h aparece no dia seguinte.
   const dailyTrend = tickets.reduce(
     (acc, t) => {
-      const date = t.date_creation.split("T")[0];
+      if (!t.date_creation) return acc;
+      const date = format(new Date(t.date_creation), "yyyy-MM-dd");
       acc[date] = (acc[date] || 0) + 1;
       return acc;
     },
