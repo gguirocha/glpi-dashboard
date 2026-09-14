@@ -48,6 +48,9 @@ export const REFRESH_INTERVAL_MS = Number(
 /** Reconciliação de deleções — `last_updated` não detecta linha removida. */
 export const RECONCILE_INTERVAL_MS = 60 * 60 * 1000; // 1h
 
+/** Ao voltar para a aba, reconcilia de novo só se a última foi há mais que isso. */
+export const RECONCILE_ON_FOCUS_MIN_MS = 5 * 60 * 1000; // 5 min
+
 export type DateWindow = { start: string; end: string };
 
 /**

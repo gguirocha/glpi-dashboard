@@ -10,6 +10,7 @@ import {
   EPOCH_CURSOR,
   REFRESH_INTERVAL_MS,
   RECONCILE_INTERVAL_MS,
+  RECONCILE_ON_FOCUS_MIN_MS,
   fetchTicketsFull,
   fetchTicketsDelta,
   fetchTicketCount,
@@ -222,6 +223,7 @@ export default function Dashboard() {
   const lastSeenRef = useRef<string | null>(null);
   const windowsRef = useRef<{ current: DateWindow; previous: DateWindow } | null>(null);
   const inFlightRef = useRef(false);
+  const lastReconcileRef = useRef(0);
 
   const persistCache = useCallback(() => {
     const w = windowsRef.current;
@@ -271,16 +273,28 @@ export default function Dashboard() {
   }, [persistCache]);
 
   /**
-   * `last_updated` não enxerga linha deletada. 1x por hora conferimos só os ids
-   * da janela (payload minúsculo) e removemos do estado o que sumiu.
+   * `last_updated` não enxerga linha deletada. Conferimos só os ids da janela
+   * (payload minúsculo) e removemos do estado o que sumiu.
+   *
+   * Roda ao abrir a página a partir do cache, ao voltar para a aba e 1x por
+   * hora. Antes rodava SÓ no intervalo de 1h com a aba visível — quem abria o
+   * painel de vez em quando via chamado já excluído no GLPI indefinidamente
+   * (caso do #7659, 14/09/2026), porque F5 relê o cache e não reconcilia.
    */
   const reconcileDeletions = useCallback(async () => {
     const w = windowsRef.current;
     if (!w) return;
 
+    lastReconcileRef.current = Date.now();
+    // Só pode sair quem já estava no estado ANTES da consulta: um ticket que o
+    // delta trouxer enquanto os ids viajam não está no snapshot e fica.
+    const before = new Set(ticketsRef.current.map((t) => t.id));
+
     try {
       const ids = await fetchTicketIds(w.current);
-      const kept = ticketsRef.current.filter((t) => ids.has(t.id));
+      // Trocou o período no meio da consulta: esses ids são de outra janela.
+      if (windowsRef.current !== w) return;
+      const kept = ticketsRef.current.filter((t) => ids.has(t.id) || !before.has(t.id));
 
       if (kept.length !== ticketsRef.current.length) {
         ticketsRef.current = kept;
@@ -312,6 +326,7 @@ export default function Dashboard() {
         setPrevTotalTickets(cached.prevTotal);
         setLoading(false);
         void refreshDelta(); // pega o que mudou desde o último acesso
+        void reconcileDeletions(); // e tira o que foi excluído nesse meio-tempo
         return;
       }
 
@@ -339,7 +354,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [currentWindow, previousWindow, refreshDelta, persistCache]);
+  }, [currentWindow, previousWindow, refreshDelta, reconcileDeletions, persistCache]);
 
   // Poll em background — substitui o refresh de página inteira.
   // Aba oculta não consome egress.
@@ -358,6 +373,10 @@ export default function Dashboard() {
       if (document.visibilityState !== "visible") return;
       setTimeLeft(REFRESH_SECONDS);
       void refreshDelta();
+      // Troca de aba é frequente: reconcilia no máximo a cada 5 min.
+      if (Date.now() - lastReconcileRef.current > RECONCILE_ON_FOCUS_MIN_MS) {
+        void reconcileDeletions();
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
 
