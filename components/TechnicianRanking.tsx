@@ -29,8 +29,11 @@ export function TechnicianRankingList({ startDate, endDate }: TechnicianRankingP
         setLoading(true)
         try {
             const { data, error } = await supabase.rpc('get_technician_ranking', {
-                start_date: `${startDate}T00:00:00`,
-                end_date: `${endDate}T23:59:59`
+                // Bordas do dia LOCAL convertidas para UTC, igual ao applyWindow de
+                // lib/tickets.ts. A string sem fuso era lida como UTC pelo Postgres e
+                // deslocava o período do ranking em 3h (corrigido 24/11/2026).
+                start_date: new Date(`${startDate}T00:00:00`).toISOString(),
+                end_date: new Date(`${endDate}T23:59:59.999`).toISOString()
             })
 
             if (error) {

@@ -87,14 +87,38 @@ function applyWindow<T>(query: T, w: DateWindow): T {
 // Fetches
 // ──────────────────────────────────────────────────────────────────────────────
 
+/**
+ * O PostgREST do Supabase devolve no MÁXIMO 1.000 linhas por requisição
+ * (db-max-rows), sem erro nenhum — o resto simplesmente não vem. Antes de
+ * 24/11/2026 o painel lia só a primeira página: "Ano passado" mostrava 1.000
+ * de 3.268 chamados e todos os KPIs do período saíam errados.
+ *
+ * Toda leitura de linhas da janela passa por aqui: pagina com .range() até a
+ * página vir incompleta. A ordem é obrigatória para a paginação ser estável.
+ */
+const PAGE_SIZE = 1000;
+
+async function fetchAllPages<R>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- builder do supabase-js não tem tipo público estável
+    build: () => any, // PostgrestFilterBuilder já com select + filtros + order
+): Promise<R[]> {
+    const all: R[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await build().range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as R[];
+        all.push(...page);
+        if (page.length < PAGE_SIZE) return all;
+    }
+}
+
 /** Carga inicial de uma janela. Só roda quando não há cache válido. */
 export async function fetchTicketsFull(w: DateWindow): Promise<Ticket[]> {
-    const { data, error } = await applyWindow(
-        supabase.from("dashboard_tickets").select(TICKET_COLUMNS),
-        w
+    return fetchAllPages<Ticket>(() =>
+        applyWindow(supabase.from("dashboard_tickets").select(TICKET_COLUMNS), w).order("id", {
+            ascending: true,
+        })
     );
-    if (error) throw error;
-    return (data ?? []) as unknown as Ticket[];
 }
 
 /**
@@ -103,15 +127,14 @@ export async function fetchTicketsFull(w: DateWindow): Promise<Ticket[]> {
  * que nem estão na tela.
  */
 export async function fetchTicketsDelta(w: DateWindow, since: string): Promise<Ticket[]> {
-    const { data, error } = await applyWindow(
-        supabase.from("dashboard_tickets").select(TICKET_COLUMNS),
-        w
-    )
-        .gt("last_updated", since)
-        .order("last_updated", { ascending: true });
-
-    if (error) throw error;
-    return (data ?? []) as unknown as Ticket[];
+    // Normalmente vem vazio; paginado mesmo assim porque um backfill pode
+    // regravar a janela inteira de uma vez.
+    return fetchAllPages<Ticket>(() =>
+        applyWindow(supabase.from("dashboard_tickets").select(TICKET_COLUMNS), w)
+            .gt("last_updated", since)
+            .order("last_updated", { ascending: true })
+            .order("id", { ascending: true })
+    );
 }
 
 /**
@@ -133,12 +156,10 @@ export async function fetchTicketCount(w: DateWindow): Promise<number> {
 
 /** Só os ids da janela — usado para detectar tickets deletados no GLPI. */
 export async function fetchTicketIds(w: DateWindow): Promise<Set<number>> {
-    const { data, error } = await applyWindow(
-        supabase.from("dashboard_tickets").select("id"),
-        w
+    const rows = await fetchAllPages<{ id: number }>(() =>
+        applyWindow(supabase.from("dashboard_tickets").select("id"), w).order("id", { ascending: true })
     );
-    if (error) throw error;
-    return new Set(((data ?? []) as { id: number }[]).map((r) => r.id));
+    return new Set(rows.map((r) => r.id));
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -175,8 +196,10 @@ export function maxLastUpdated(list: Ticket[], fallback: string | null): string 
  * datas 3h deslocadas e um cursor na convenção antiga, então tem que ser
  * descartado — não dá para migrar linha a linha.
  */
-const CACHE_PREFIX = "glpi_tickets_v2_";
-const LEGACY_PREFIXES = ["glpi_tickets_v1_"];
+// v3 (24/11/2026): caches v2 de janelas grandes guardaram só as 1.000 primeiras
+// linhas (sem paginação) e o delta não completa o que falta — descartar.
+const CACHE_PREFIX = "glpi_tickets_v3_";
+const LEGACY_PREFIXES = ["glpi_tickets_v1_", "glpi_tickets_v2_"];
 const MAX_CACHED_WINDOWS = 4;
 
 /** Limpa caches de versões anteriores (uma vez, no primeiro acesso). */
