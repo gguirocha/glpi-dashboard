@@ -1095,7 +1095,6 @@ export default function Dashboard() {
             <KPICard
               title="Tempo Médio Resolução"
               value={`${avgResolutionHours.toFixed(1)}h`}
-              description="Horas úteis (seg–sex 8–18h, sáb 8–12h)"
               icon={Clock}
               goalValue={goals.time}
               onGoalChange={(val) => updateGoal("time", val)}
@@ -1109,7 +1108,7 @@ export default function Dashboard() {
                   <>
                   <p className="mb-2 pb-2 border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400">
                     Mediana: <span className="font-semibold text-slate-800 dark:text-slate-100">{medianResolutionHours.toFixed(1)}h úteis</span>
-                    {" "}· {resolvedHours.length} resolvidos (metade resolve em até esse tempo)
+                    {" "}· {resolvedHours.length} resolvidos
                   </p>
                   <ul className="space-y-1.5">
                     {topResolutionTickets.map((t) => (
@@ -1127,7 +1126,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <span className="whitespace-nowrap font-semibold text-slate-800 dark:text-slate-100">
-                          {Math.round(t.hours)}h úteis (≈ {t.businessDays.toFixed(1)} dias úteis)
+                          {Math.round(t.hours)}h úteis (≈ {t.businessDays.toFixed(1)} dias)
                         </span>
                       </li>
                     ))}
