@@ -521,14 +521,24 @@ export default function Dashboard() {
     };
   });
 
-  // KPI: média das prioridades que tiveram chamado resolvido no período
-  // (prioridade sem resolvido não entra como 0h).
-  const prioritiesWithResolved = avgTimeByPriority.filter((p) => p.resolved > 0);
+  // KPI: média SIMPLES dos chamados resolvidos (cada chamado pesa igual).
+  // Até 24/11/2026 era a média das médias por prioridade, em que cada prioridade
+  // pesava 1/N independente do volume — a Baixa (poucos chamados, os mais longos)
+  // puxava o card para cima. O gráfico por prioridade continua mostrando cada uma.
+  const resolvedHours = tickets
+    .filter((t) => t.date_solved && t.time_to_resolve > 0)
+    .map((t) => t.time_to_resolve / 3600)
+    .sort((a, b) => a - b);
   const avgResolutionHours =
-    prioritiesWithResolved.length > 0
-      ? prioritiesWithResolved.reduce((acc, i) => acc + Number(i.hours), 0) /
-        prioritiesWithResolved.length
+    resolvedHours.length > 0
+      ? resolvedHours.reduce((acc, h) => acc + h, 0) / resolvedHours.length
       : 0;
+  const medianResolutionHours =
+    resolvedHours.length === 0
+      ? 0
+      : resolvedHours.length % 2
+        ? resolvedHours[(resolvedHours.length - 1) / 2]
+        : (resolvedHours[resolvedHours.length / 2 - 1] + resolvedHours[resolvedHours.length / 2]) / 2;
 
   // 4b. Top 5 chamados com MAIOR tempo de resolução (dentro do período filtrado)
   const topResolutionTickets = [...tickets]
@@ -1096,6 +1106,11 @@ export default function Dashboard() {
                 topResolutionTickets.length === 0 ? (
                   <p className="text-slate-400">Sem chamados resolvidos no período.</p>
                 ) : (
+                  <>
+                  <p className="mb-2 pb-2 border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                    Mediana: <span className="font-semibold text-slate-800 dark:text-slate-100">{medianResolutionHours.toFixed(1)}h úteis</span>
+                    {" "}· {resolvedHours.length} resolvidos (metade resolve em até esse tempo)
+                  </p>
                   <ul className="space-y-1.5">
                     {topResolutionTickets.map((t) => (
                       <li
@@ -1117,6 +1132,7 @@ export default function Dashboard() {
                       </li>
                     ))}
                   </ul>
+                  </>
                 )
               }
             />
