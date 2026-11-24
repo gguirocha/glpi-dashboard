@@ -23,14 +23,13 @@ export default function LoginPage() {
 
             // If not an email, try to find the email associated with this username
             if (!loginEmail.includes("@")) {
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('email')
-                    .eq('username', loginEmail)
-                    .single();
+                // RPC SECURITY DEFINER: anon não lê mais a tabela profiles
+                // (antes expunha e-mail/papel de todos os usuários).
+                const { data: resolvedEmail } = await supabase
+                    .rpc('login_email_for_username', { p_username: loginEmail });
 
-                if (profile && profile.email) {
-                    loginEmail = profile.email;
+                if (typeof resolvedEmail === 'string' && resolvedEmail) {
+                    loginEmail = resolvedEmail;
                     // console.log("System Login: Resolved username", email, "to", loginEmail);
                 } else {
                     // Fallback for "admin" or legacy users without custom emails

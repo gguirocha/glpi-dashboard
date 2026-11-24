@@ -1,25 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/requireAdmin';
 
 export async function POST(req: NextRequest) {
-    // 1. Verify Service Role Key
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-    if (!serviceRoleKey || !supabaseUrl) {
-        return NextResponse.json(
-            { error: "Configuration Error: Missing SUPABASE_SERVICE_ROLE_KEY or URL." },
-            { status: 500 }
-        );
-    }
-
-    // 2. Initialize Admin Client
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-        },
-    });
+    // Só admin logado (JWT + profiles.role='admin') pode criar usuário.
+    const check = await requireAdmin(req);
+    if (!check.ok) return check.response;
+    const supabaseAdmin = check.admin;
 
     try {
         const body = await req.json();

@@ -96,9 +96,14 @@ export default function AdminUsersPage() {
                 ? { userId: isEditing, password: formData.password, isAdmin: formData.isAdmin } // Update: only pwd and role/admin
                 : formData; // Create: all fields
 
+            // As rotas /api/admin exigem o JWT da sessão (validado no servidor).
+            const { data: { session } } = await supabase.auth.getSession();
             const res = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session?.access_token ?? ''}`,
+                },
                 body: JSON.stringify(payload)
             });
 

@@ -480,19 +480,21 @@ export default function Dashboard() {
       : 0;
 
   // 4. Avg Resolution Time by Priority
+  // time_to_resolve = segundos ÚTEIS (seg–sex 08–18, sáb 08–12), calculado no sync
+  // com o calendário do GLPI. A média divide só pelos chamados RESOLVIDOS: antes os
+  // abertos entravam no denominador com tempo 0 e o mês corrente saía "melhor".
   const priorityGroups = tickets.reduce(
     (acc, t) => {
       if (!acc[t.priority_label])
-        acc[t.priority_label] = { total: 0, count: 0 };
-      if (t.time_to_resolve > 0) {
+        acc[t.priority_label] = { total: 0, count: 0, resolved: 0 };
+      if (t.date_solved && t.time_to_resolve > 0) {
         acc[t.priority_label].total += t.time_to_resolve;
+        acc[t.priority_label].resolved += 1;
       }
-      // Always count for percentage even if time_to_resolve is 0 (though avg requires time)
-      // Actually typically we want % of total volume.
-      acc[t.priority_label].count += 1;
+      acc[t.priority_label].count += 1; // volume (para o % do rótulo)
       return acc;
     },
-    {} as Record<string, { total: number; count: number }>,
+    {} as Record<string, { total: number; count: number; resolved: number }>,
   );
 
   const priorityTranslations: Record<string, string> = {
@@ -511,12 +513,22 @@ export default function Dashboard() {
     const translatedName = priorityTranslations[p] || p;
     return {
       name: `${translatedName} (${pct}%)`, // Append % to name
+      resolved: priorityGroups[p].resolved,
       hours:
-        count > 0 && priorityGroups[p].total > 0
-          ? (priorityGroups[p].total / count / 3600).toFixed(1)
+        priorityGroups[p].resolved > 0
+          ? (priorityGroups[p].total / priorityGroups[p].resolved / 3600).toFixed(1)
           : 0,
     };
   });
+
+  // KPI: média das prioridades que tiveram chamado resolvido no período
+  // (prioridade sem resolvido não entra como 0h).
+  const prioritiesWithResolved = avgTimeByPriority.filter((p) => p.resolved > 0);
+  const avgResolutionHours =
+    prioritiesWithResolved.length > 0
+      ? prioritiesWithResolved.reduce((acc, i) => acc + Number(i.hours), 0) /
+        prioritiesWithResolved.length
+      : 0;
 
   // 4b. Top 5 chamados com MAIOR tempo de resolução (dentro do período filtrado)
   const topResolutionTickets = [...tickets]
@@ -526,8 +538,8 @@ export default function Dashboard() {
     .map((t) => ({
       id: t.id,
       name: t.name,
-      days: t.time_to_resolve / 86400, // segundos -> dias
-      hours: t.time_to_resolve / 3600, // segundos -> horas
+      hours: t.time_to_resolve / 3600, // segundos úteis -> horas úteis
+      businessDays: t.time_to_resolve / 36000, // dia útil = 10h (seg–sex 08–18)
     }));
 
   // 5. Top Categories
@@ -1065,14 +1077,15 @@ export default function Dashboard() {
               title="Resolução 1º Nível (FCR)"
               value={`${fcrRate}%`}
               icon={TrendingUp}
-              description="Resolvido c/ 1 acomp. ou menos"
+              description="Resolvido c/ até 1 acomp. do técnico"
               goalValue={goals.fcr}
               onGoalChange={(val) => updateGoal("fcr", val)}
               suffix="%"
             />
             <KPICard
               title="Tempo Médio Resolução"
-              value={`${(avgTimeByPriority.reduce((acc, i) => acc + Number(i.hours), 0) / (avgTimeByPriority.length || 1)).toFixed(1)}h`}
+              value={`${avgResolutionHours.toFixed(1)}h`}
+              description="Horas úteis (seg–sex 8–18h, sáb 8–12h)"
               icon={Clock}
               goalValue={goals.time}
               onGoalChange={(val) => updateGoal("time", val)}
@@ -1099,7 +1112,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <span className="whitespace-nowrap font-semibold text-slate-800 dark:text-slate-100">
-                          {t.days.toFixed(1)} dias ({Math.round(t.hours)}h)
+                          {Math.round(t.hours)}h úteis (≈ {t.businessDays.toFixed(1)} dias úteis)
                         </span>
                       </li>
                     ))}
@@ -1228,7 +1241,7 @@ export default function Dashboard() {
             {/* Avg Resolution by Priority */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 col-span-2 transition-colors">
               <h3 className="text-lg font-semibold mb-6 dark:text-slate-100">
-                Tempo Médio Resolução (Horas) por Prioridade
+                Tempo Médio Resolução (Horas Úteis) por Prioridade
               </h3>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
