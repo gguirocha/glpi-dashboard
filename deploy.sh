@@ -65,7 +65,7 @@ warn() { echo "${C_YELLOW}!${C_RST} $*"; }
 err()  { echo "${C_RED}✗${C_RST} $*" >&2; }
 
 ssh_exec() {
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=10 "${EC2_USER}@${EC2_HOST}" "$@"
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "${EC2_USER}@${EC2_HOST}" "$@"
 }
 
 # ────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ trap 'rm -f "$TARFILE"' EXIT
 # Transfere para EC2
 # ────────────────────────────────────────────────────────────
 log "Transferindo build para EC2..."
-scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -q \
+scp -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -q \
     "$TARFILE" "${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/next-build.tar.gz"
 ok "Transfer OK"
 
