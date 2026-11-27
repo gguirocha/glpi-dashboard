@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Fase: **Execução — E1 (banco)** · Saúde: 🟢 (no prazo)
-> Próximo passo: ler o esquema real, escrever migrations, revisão ECC, pedir OK para aplicar · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Próximo passo: OK do gestor para aplicar a migration v5 (com cópia CSV antes) · Bloqueios: aguardando OK · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -113,6 +113,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 ## 10. Qualidade — evidências (ECC)
 | Etapa | Testes (verification-loop / e2e) | Revisão (code + linguagem + banco) | Achados CRITICAL/HIGH corrigidos |
 |---|---|---|---|
+| E1 | Ensaio em produção dentro de transação desfeita: 32/32 testes (idempotência 2×, coerência fase×status, 7 caminhos legados da trigger, guardas de código/prazo prometido, RESTRICT, permissões de anon/authenticated, realtime) | ecc:database-reviewer (0 CRITICAL, 2 HIGH, 7 MEDIUM, 5 LOW) + ecc:security-reviewer (0 CRITICAL/HIGH, 3 MEDIUM) | 2 HIGH (código truncado ≥ id 1000; backfill não idempotente após go-live) e todos os MEDIUM corrigidos; LOW aplicados exceto L4 (saúde dos antigos fica verde) |
 
 **Segurança (G3):** —
 **Quality gate / cobertura:** —
@@ -143,3 +144,7 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | Projeto aberto (card 92); explorer mapeou o módulo de projetos; 4 decisões do gestor (fases, report de exceções, chave só do gestor, prazo 1 semana); planner montou 6 etapas (5 dias úteis) |
 | 2026-11-27 | Explorer apontou "anon escreve em dashboard_projects": descartado, teste de 27/11 deu 401 (grants revogados em 24/11) |
 | 2026-11-27 | **G1 aprovado** pelo gestor; card 92 → Em desenvolvimento, prazo 04/12; E1 iniciada |
+| 2026-11-27 | Termo de abertura exportado (docx + pdf timbrados) em OneDrive\Trabalho\Projetos6\PRJ-2026-092 Quadro de Projetos v2 |
+| 2026-11-27 | E1: esquema real lido (read-only) e versionado em migration_v5_0_baseline.sql; achado: tabelas/sequências novas nascem com grants para anon/authenticated (default privileges) |
+| 2026-11-27 | E1: migration v5 revisada por database-reviewer e security-reviewer, corrigida e ensaiada em transação desfeita (32/32) |
+| 2026-11-27 | Decisão: eventos com ON DELETE RESTRICT (trilha de auditoria não some por DELETE na tela); código PRJ e prazo prometido protegidos na trigger. Fora do escopo (follow-up): ALTER DEFAULT PRIVILEGES do schema public para objetos futuros |
