@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E4 (quadro v2) · Próximo passo: lógica com testes, junção de links no servidor, tela, revisão ECC · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: Execução — E4 pronta, aguardando OK para publicar · Próximo passo: publicar (v5_2, PR, deploy, kit v1.4.0) e G2 da E4 · Bloqueios: aguardando OK · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -116,6 +116,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | E1 | Ensaio em produção dentro de transação desfeita: 32/32 testes (idempotência 2×, coerência fase×status, 7 caminhos legados da trigger, guardas de código/prazo prometido, RESTRICT, permissões de anon/authenticated, realtime) | ecc:database-reviewer (0 CRITICAL, 2 HIGH, 7 MEDIUM, 5 LOW) + ecc:security-reviewer (0 CRITICAL/HIGH, 3 MEDIUM) | 2 HIGH (código truncado ≥ id 1000; backfill não idempotente após go-live) e todos os MEDIUM corrigidos; LOW aplicados exceto L4 (saúde dos antigos fica verde) |
 | E2 | vitest 137 testes (100% nas funções puras; tdd-guide, teste primeiro), tsc, eslint dos arquivos do projeto, build de produção; ensaio da função SQL em transação desfeita 24/24 | ecc:security-reviewer (2 passes: 1 HIGH, 4 MEDIUM; reconferência: resolvidos, 1 MEDIUM novo corrigido), ecc:typescript-reviewer (2 HIGH, 6 MEDIUM; 1 alarme falso: coerência fase×status já garantida pela trigger da E1), ecc:database-reviewer (1 HIGH, 4 MEDIUM) | todos os HIGH/MEDIUM corrigidos; aceitos: IDOR (só o gestor tem chave na v2), sem expiração/rotação de chave (v3) |
 | E3 | node:test 133 testes do CLI (tdd-guide, teste primeiro; respostas simuladas no formato real da API); fluxo real contra a API: abrir → G1 → G2 → link mesclado → prometido sem mudança recusado com dica → concluir (PRJ-2026-103); instalador rodado 2× | ecc:security-reviewer (0 CRITICAL/HIGH, 5 MEDIUM) + ecc:code-reviewer (2 HIGH: G1 da skill quebrado e código PRJ calculado errado em 2027; 4 MEDIUM) | todos os HIGH/MEDIUM corrigidos; a mesclagem de links no cliente tem corrida conhecida → mover para o servidor na E4 (registrado em Controle de mudanças) |
+| E4 | vitest 181 testes (board.ts 100% linhas; tdd-guide), tsc, eslint, build; tela conferida na pré-visualização local /dev/quadro (colunas, card, painel, linha do tempo, mover, foco/Esc, sem erros de console); ensaio v5_2 12/12; CLI 129 testes | ecc:react-reviewer (3 HIGH, 6 MEDIUM) + ecc:database-reviewer v5_2 (2 MEDIUM) | todos corrigidos; trava de concorrência e modal real só testáveis com Supabase → conferir na homologação |
 
 **Segurança (G3):** —
 **Quality gate / cobertura:** —
@@ -163,3 +164,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | **G2 da E2 aprovado** pelo gestor; card 92 → 2/6 com evento G2 pela API; E3 iniciada |
 | 2026-11-27 | E3: projeto.mjs reescrito para a API (kit ti-mdf v1.3.0/1.3.1), chave mestra removida do .ti-mdf.env do gestor pelo instalador; projeto de teste PRJ-2026-103 criado e concluído (remover na E6) |
 | 2026-11-27 | **G2 da E3 aprovado** pelo gestor; card 92 → 3/6 pela skill; E4 iniciada |
+| 2026-11-27 | E4 construída (commit `8e0e204`): quadro por fases, painel acessível, cache do modo apresentação, junção de links no servidor (v5_2) e CLI com delta (kit local `2367d69`, publicar só após a v5_2) |
