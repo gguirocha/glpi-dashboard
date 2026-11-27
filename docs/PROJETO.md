@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Homologação — G3 liberado, publicando correções · Próximo passo: homologação pelo roteiro docs/HOMOLOGACAO.md (A3, A4, A6) e e-mail de segunda 30/11 (A5) · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: Homologação — correções publicadas (PR #4, kit 1.4.1) · Próximo passo: homologação pelo roteiro docs/HOMOLOGACAO.md (A3, A4, A6) e e-mail de segunda 30/11 (A5) · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -176,3 +176,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | Com OK do gestor, projetos de teste PRJ-2026-102/103 apagados em transação (9 eventos + 2 projetos; títulos conferidos antes). Nova prévia real: 1 exceção, 12 entregas, 6 individuais, sem testes. Segunda 30/11 07:00 sai no formato novo |
 | 2026-11-27 | E6 iniciada a pedido do gestor: revisão de segurança final e quality gate; correções na branch feat/prj-2026-092-e6 e no kit 1.4.1 (não publicados); roteiro de homologação em docs/HOMOLOGACAO.md |
 | 2026-11-27 | **G3 liberado** pelo gestor (publicar agora, antes de segunda); card 92 → Homologação |
+| 2026-11-27 | Publicado: PR #4 (BUILD_ID s11pPDU-IqJVbWAHINr1p, health 200; cabeçalhos de segurança conferidos; /api sem chave 401; /dev/quadro 404; agendador iniciou; prévia igual: 6 individuais, 1 exceção, 12 entregas). Kit 1.4.1 publicado, instalado e hooks do vault reinstalados (check 366/0). Cota diária gratuita do Gemini esgotada pelas prévias (429) — e-mails saem com texto registrado; cota volta 05:00 BRT, antes do disparo |
