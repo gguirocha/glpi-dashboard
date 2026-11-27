@@ -1,8 +1,8 @@
 # Documento do Projeto — Quadro de Projetos v2 + API de projetos
 
 > **Situação atual**
-> Fase: **Execução — E1 (banco)** · Saúde: 🟢 (no prazo)
-> Próximo passo: G2 da E1 (gestor aprova o resultado); depois E2 (API) · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Saúde: 🟢 (1 dia útil adiantado)
+> Fase: Execução — E2 (API) · Próximo passo: lógica + testes, função de gravação, rotas, revisão ECC · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -54,8 +54,8 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 ## 5. Entregas (etapas)
 | # | Resultado entregue | Critério de pronto | Status |
 |---|---|---|---|
-| E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | aguardando aprovação |
-| E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | pendente |
+| E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | ✔ aprovada (G2 27/11, commit `2beb289`) |
+| E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | em andamento |
 | E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | pendente |
 | E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | pendente |
 | E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | pendente |
@@ -149,3 +149,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E1: migration v5 revisada por database-reviewer e security-reviewer, corrigida e ensaiada em transação desfeita (32/32) |
 | 2026-11-27 | Decisão: eventos com ON DELETE RESTRICT (trilha de auditoria não some por DELETE na tela); código PRJ e prazo prometido protegidos na trigger. Fora do escopo (follow-up): ALTER DEFAULT PRIVILEGES do schema public para objetos futuros |
 | 2026-11-27 | E1 aplicada em produção com OK do gestor: cópia CSV (74 projetos) → migration (COMMIT) → conferência: 74 com código, fases abertura/todo=1 · encerrado/done=71 · execucao/in_progress=2; ensaio repetido no banco migrado 32/32; anon via REST 401 nas 3 tabelas; vault atualizado |
+| 2026-11-27 | **G2 da E1 aprovado** pelo gestor; E2 (API) iniciada |
