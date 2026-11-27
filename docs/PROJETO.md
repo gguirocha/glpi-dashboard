@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E4 pronta, aguardando OK para publicar · Próximo passo: publicar (v5_2, PR, deploy, kit v1.4.0) e G2 da E4 · Bloqueios: aguardando OK · Atualizado: 2026-11-27
+> Fase: Execução — E5 aprovada, publicando · Próximo passo: publicar E5 e conferir a prévia real antes de segunda 30/11 07:00; depois E6 · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -57,8 +57,8 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | ✔ aprovada (G2 27/11, commit `2beb289`) |
 | E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | ✔ aprovada (G2 27/11, PR #1 / commit `1b1768a`) |
 | E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | ✔ aprovada (G2 27/11, kit ti-mdf v1.3.1) |
-| E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | em andamento |
-| E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | pendente |
+| E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | ✔ 27/11 (G2) |
+| E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | ✔ 27/11 (G2) |
 | E6 | Homologação, segurança e encerramento | A1–A7 marcados; revisão de segurança sem CRITICAL/HIGH; vault atualizado; projeto de teste removido | pendente |
 
 ## 6. Cronograma (previsto × realizado)
@@ -68,7 +68,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | E1 Banco (0,75 d) | 27/11–30/11 | 27/11 | −1 dia útil (adiantada) |
 | E2 API (1,25 d) | 30/11–01/12 | 27/11 | −2 dias úteis (adiantada) |
 | E3 Skill pela API (0,5 d) | 02/12 | 27/11 | −3 dias úteis (adiantada) |
-| E4 Quadro v2 (1,25 d) | 02/12–03/12 | | |
+| E4 Quadro v2 (1,25 d) | 02/12–03/12 | 27/11 | −4 dias úteis (adiantada) |
 | E5 Reports (0,75 d) | 04/12 | | |
 | G3 Liberação / E6 | 04/12 | | |
 | G4 Aceite (A5 real) | 07/12 | | |
@@ -77,7 +77,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | Risco | Prob. | Impacto | Resposta | Dono | Situação |
 |---|---|---|---|---|---|
 | Tabelas novas herdam grants padrão e a de chaves vaza | M | A | `REVOKE ALL` + RLS sem policies + `REVOKE EXECUTE FROM PUBLIC`; prova com anon e com usuário comum em E1 | Claude | aberto |
-| Teste de report envia e-mail real e apaga o andamento | M | A | modo prévia em E5; `--validate` proibido | Claude | aberto |
+| Teste de report envia e-mail real e apaga o andamento | M | A | modo prévia em E5 (padrão da rota manual; envio só com send=1); `--validate` proibido | Claude | mitigado 27/11 |
 | Trigger fase↔status diverge do que a tela antiga grava | M | M | trigger nas duas direções + `completed_at`; testar os 3 caminhos legados em E1 | Claude | aberto |
 | Baseline do banco diferente do assumido | B | M | E1 começa só lendo o esquema real e versionando | Claude | aberto |
 | Egress do Supabase volta a subir | B | A | colunas fixas, eventos por card com limite, sem polling; conferir egress 48 h após E4 | Claude | aberto |
@@ -117,6 +117,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | E2 | vitest 137 testes (100% nas funções puras; tdd-guide, teste primeiro), tsc, eslint dos arquivos do projeto, build de produção; ensaio da função SQL em transação desfeita 24/24 | ecc:security-reviewer (2 passes: 1 HIGH, 4 MEDIUM; reconferência: resolvidos, 1 MEDIUM novo corrigido), ecc:typescript-reviewer (2 HIGH, 6 MEDIUM; 1 alarme falso: coerência fase×status já garantida pela trigger da E1), ecc:database-reviewer (1 HIGH, 4 MEDIUM) | todos os HIGH/MEDIUM corrigidos; aceitos: IDOR (só o gestor tem chave na v2), sem expiração/rotação de chave (v3) |
 | E3 | node:test 133 testes do CLI (tdd-guide, teste primeiro; respostas simuladas no formato real da API); fluxo real contra a API: abrir → G1 → G2 → link mesclado → prometido sem mudança recusado com dica → concluir (PRJ-2026-103); instalador rodado 2× | ecc:security-reviewer (0 CRITICAL/HIGH, 5 MEDIUM) + ecc:code-reviewer (2 HIGH: G1 da skill quebrado e código PRJ calculado errado em 2027; 4 MEDIUM) | todos os HIGH/MEDIUM corrigidos; a mesclagem de links no cliente tem corrida conhecida → mover para o servidor na E4 (registrado em Controle de mudanças) |
 | E4 | vitest 181 testes (board.ts 100% linhas; tdd-guide), tsc, eslint, build; tela conferida na pré-visualização local /dev/quadro (colunas, card, painel, linha do tempo, mover, foco/Esc, sem erros de console); ensaio v5_2 12/12; CLI 129 testes | ecc:react-reviewer (3 HIGH, 6 MEDIUM) + ecc:database-reviewer v5_2 (2 MEDIUM) | todos corrigidos; trava de concorrência e modal real só testáveis com Supabase → conferir na homologação |
+| E5 | vitest 250 testes (report.ts 100% linhas/98% ramos pelo tdd-guide; ciclo com dependências falsas: prévia não envia/marca/limpa/alerta, falhas de envio, IA fora, limpeza protegida, links da IA removidos), tsc, eslint, build; amostra visual dos 2 e-mails com dados fictícios; leitura (só leitura) da config real: disparo segunda 07:00, geral com 3 destinatários, 5 encerrados elegíveis (iguais à regra antiga); fuso do servidor America/Sao_Paulo | ecc:typescript-reviewer (2 HIGH, 6 MEDIUM) + ecc:security-reviewer (0 CRITICAL/HIGH, 2 MEDIUM) + ecc:silent-failure-hunter (3 ALTA, 6 MÉDIA) | corrigidos: leitura falha antes do envio devolve o marcador e tenta de novo (alerta à TI se esgotar); alerta por e-mail à TI em qualquer falha/aviso; rota manual é prévia por padrão (envio só com send=1), segredo em tempo constante, CSP; destinatários validados no envio; texto do projeto delimitado como dado no prompt e links removidos da saída da IA; eventos mais recentes primeiro; limpeza do andamento só se o texto não mudou; timeouts de IA e SMTP; retry nas marcações. Aceitos: janela fixa de 7 dias; IA em série |
 
 **Segurança (G3):** —
 **Quality gate / cobertura:** —
@@ -129,6 +130,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 ## 12. Implantação e volta atrás
 **E1 (27/11):** cópia CSV de `dashboard_projects` (74 linhas) no OneDrive do projeto → migration v5 (COMMIT).
 **E2 (27/11):** migration v5_1 (função `api_write_project`, EXECUTE só service_role) → PR [gguirocha/glpi-dashboard#1](https://github.com/gguirocha/glpi-dashboard/pull/1) mergeado → nginx: backup `/etc/nginx/conf.d/glpi-dashboard.conf.bak_20261127_112703_prj092`, config de `docs/infra/nginx-glpi-dashboard.conf`, `nginx -t` ok, reload → `deploy.sh` (sem `--validate`), BUILD_ID blVdjJlz0uOAXULYMFHpp, health 200 → chave do gestor (id 3) gravada direto no `.ti-mdf.env` (ACL só do usuário), nunca exibida.
+**E4 (27/11):** migration v5_2 (links mesclados no servidor) → PR [gguirocha/glpi-dashboard#2](https://github.com/gguirocha/glpi-dashboard/pull/2) mergeado → `deploy.sh` (BUILD_ID 5N_LCYEJUpPjipbc5AO9y, health 200) → kit ti-mdf v1.4.0 (CLI envia delta de links) publicado depois da v5_2. Conferido: `/` 200, `/dev/quadro` 404, API sem chave 401, delta de links em produção ok (projeto de teste 103).
 Volta atrás: app `.next.bak` + `pm2 restart`; nginx: restaurar o backup e `systemctl reload nginx`; banco: `DROP FUNCTION api_write_project` (a tela não depende dela).
 
 Ordem: migration (aditiva, idempotente) → push + deploy de API → `projeto.mjs` → UI → reports. Volta atrás do app:
@@ -165,3 +167,7 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E3: projeto.mjs reescrito para a API (kit ti-mdf v1.3.0/1.3.1), chave mestra removida do .ti-mdf.env do gestor pelo instalador; projeto de teste PRJ-2026-103 criado e concluído (remover na E6) |
 | 2026-11-27 | **G2 da E3 aprovado** pelo gestor; card 92 → 3/6 pela skill; E4 iniciada |
 | 2026-11-27 | E4 construída (commit `8e0e204`): quadro por fases, painel acessível, cache do modo apresentação, junção de links no servidor (v5_2) e CLI com delta (kit local `2367d69`, publicar só após a v5_2) |
+| 2026-11-27 | E4 publicada com OK do gestor (v5_2, PR #2, deploy, kit v1.4.0). Visual com dados reais depende de login do gestor (homologação) |
+| 2026-11-27 | **G2 da E4 aprovado** pelo gestor; card 92 → 4/6 pela skill; E5 iniciada |
+| 2026-11-27 | E5 construída e revisada (3 agentes ECC, achados altos corrigidos); prévia real depende de publicar (IA e banco só no servidor); próximo disparo automático = segunda 30/11 07:00 |
+| 2026-11-27 | **G2 da E5 aprovado** pelo gestor com OK para publicar já (segunda 30/11 sai no formato novo se a prévia real for aprovada; senão, volta atrás antes); card 92 → 5/6 |

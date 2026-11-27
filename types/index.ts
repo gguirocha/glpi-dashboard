@@ -100,15 +100,6 @@ export interface TechnicianRanking {
     media_final: number;
 }
 
-export interface WeeklyReportPayload {
-    project: Project;
-    generatedEmail: string;
-    sentTo: string[];
-    sentAt: string;
-    success: boolean;
-    error?: string;
-}
-
 // Agendamento do ciclo semanal — configurável por admin via UI
 export interface ScheduleConfig {
     dayOfWeek: number; // 0=Domingo, 1=Segunda, 2=Terça, 3=Quarta, 4=Quinta, 5=Sexta, 6=Sábado
@@ -123,27 +114,53 @@ export interface GeneralReportConfig {
     schedule?: ScheduleConfig; // se ausente, aplica default Segunda 08:00
 }
 
+/** E-mail montado pelo ciclo semanal (devolvido só no modo prévia). */
+export interface RenderedReportEmail {
+    to: string[];
+    subject: string;
+    text: string;
+    html: string;
+}
+
+export interface IndividualReportResult {
+    projectId: number;
+    code: string;
+    title: string;
+    sentTo: string[];
+    success: boolean;
+    error?: string;
+    /** true quando a IA falhou e o texto da semana saiu sem redação (fatos continuam completos). */
+    narrativeFallback: boolean;
+    email?: RenderedReportEmail;
+}
+
 export interface GeneralReportResult {
     enabled: boolean;
     sentTo: string[];
-    projectsIncluded: number;
-    /** IDs dos projetos que foram efetivamente incluídos no e-mail consolidado entregue com sucesso. Vazio se o envio falhou. */
+    exceptions: number;
+    deliveries: number;
+    /** Projetos citados no e-mail entregue (exceções + entregas). Vazio se não enviou. */
     includedProjectIds: number[];
-    generatedEmail: string;
     success: boolean;
     error?: string;
-    sentAt: string;
+    summaryFallback: boolean;
+    email?: RenderedReportEmail;
 }
 
 export interface WeeklyCycleResult {
+    /** Prévia: monta os e-mails e não envia, não marca envio e não limpa o andamento. */
+    preview: boolean;
+    at: string;
     individual: {
         processed: number;
         succeeded: number;
         failed: number;
         skipped: number;
-        results: WeeklyReportPayload[];
+        results: IndividualReportResult[];
     };
     general: GeneralReportResult;
     /** Quantidade de projetos cujo weekly_update foi limpo após envio bem-sucedido */
     cleared: number;
+    /** Falhas que não impediram o envio (IA fora, marcação não gravada, sem destinatários). */
+    warnings: string[];
 }
