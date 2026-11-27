@@ -15,7 +15,7 @@ export type ProjectFields = {
   area: string | null;
   sponsor: string | null;
   origin_ticket: string | null;
-  links: Record<string, string> | null;
+  links: Record<string, string | null> | null;
   next_step: string | null;
   decision_needed: string | null;
   weekly_update: string | null;
@@ -77,16 +77,21 @@ const validLinkUrl = (url: string): boolean => {
   }
 };
 
-const links = (v: unknown): FieldResult => {
+const links = (allowNull: boolean) => (v: unknown): FieldResult => {
   if (v === null) return { ok: true, value: null };
   if (!isPlainObject(v)) return fail('Campo links deve ser objeto.');
   const entries = Object.entries(v);
   if (entries.length > 10) return fail('Campo links aceita no máximo 10 itens.');
-  const out: Record<string, string> = Object.create(null);
+  const out: Record<string, string | null> = Object.create(null);
   for (const [k, url] of entries) {
     if (FORBIDDEN_KEYS.has(k)) return fail('Nome de link não permitido.');
     if (k.includes('\u0000')) return fail(NUL_MSG('links'));
     if (k.length < 1 || k.length > 50) return fail('Nome de link deve ter de 1 a 50 caracteres.');
+    if (url === null) {
+      if (!allowNull) return fail('Link nulo só é permitido na atualização (remove o nome).');
+      out[k] = null;
+      continue;
+    }
     if (typeof url !== 'string') return fail('Link deve ser URL http(s) de até 500 caracteres.');
     if (url.includes('\u0000')) return fail(NUL_MSG('links'));
     if (url.length > 500 || CONTROL_RE.test(url) || !validLinkUrl(url)) {
@@ -97,7 +102,7 @@ const links = (v: unknown): FieldResult => {
   return { ok: true, value: out };
 };
 
-const FIELDS: Record<keyof ProjectFields, (v: unknown) => FieldResult> = {
+const buildFields = (allowNullLinks: boolean): Record<keyof ProjectFields, (v: unknown) => FieldResult> => ({
   title: text('title', 200, true),
   owner: text('owner', 100),
   phase: oneOf('phase', PHASES),
@@ -111,14 +116,17 @@ const FIELDS: Record<keyof ProjectFields, (v: unknown) => FieldResult> = {
   area: text('area', 200),
   sponsor: text('sponsor', 200),
   origin_ticket: text('origin_ticket', 200),
-  links,
+  links: links(allowNullLinks),
   next_step: text('next_step', 1000),
   decision_needed: text('decision_needed', 1000),
   weekly_update: text('weekly_update', 4000),
   real_status_id: realStatus,
-};
+});
 
-function parseProject(input: unknown): Result<Partial<ProjectFields>> {
+const CREATE_FIELDS = buildFields(false);
+const UPDATE_FIELDS = buildFields(true);
+
+function parseProject(input: unknown, FIELDS: typeof CREATE_FIELDS): Result<Partial<ProjectFields>> {
   if (!isPlainObject(input)) return fail('Campo project deve ser objeto.');
   const out: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(input)) {
@@ -149,14 +157,14 @@ function parseEvent(input: unknown): Result<EventInput> {
   return { ok: true, value: { kind: kind.value as EventKind, summary: summary.value as string } };
 }
 
-function parseBody(body: unknown): Result<{ project?: Partial<ProjectFields>; event?: EventInput }> {
+function parseBody(body: unknown, FIELDS: typeof CREATE_FIELDS): Result<{ project?: Partial<ProjectFields>; event?: EventInput }> {
   if (!isPlainObject(body)) return fail('Corpo da requisição deve ser um objeto JSON.');
   for (const key of Object.keys(body)) {
     if (key !== 'project' && key !== 'event') return fail(`Campo desconhecido: ${key.slice(0, 50)}.`);
   }
   const value: { project?: Partial<ProjectFields>; event?: EventInput } = {};
   if (body.project !== undefined) {
-    const p = parseProject(body.project);
+    const p = parseProject(body.project, FIELDS);
     if (!p.ok) return p;
     value.project = p.value;
   }
@@ -169,7 +177,7 @@ function parseBody(body: unknown): Result<{ project?: Partial<ProjectFields>; ev
 }
 
 export function parseCreate(body: unknown): Result<{ project: CreateProjectFields; event?: EventInput }> {
-  const r = parseBody(body);
+  const r = parseBody(body, CREATE_FIELDS);
   if (!r.ok) return r;
   const project = r.value.project;
   if (!project || typeof project.title !== 'string') return fail('Campo title é obrigatório.');
@@ -179,7 +187,7 @@ export function parseCreate(body: unknown): Result<{ project: CreateProjectField
 }
 
 export function parseUpdate(body: unknown): Result<{ project: Partial<ProjectFields>; event?: EventInput }> {
-  const r = parseBody(body);
+  const r = parseBody(body, UPDATE_FIELDS);
   if (!r.ok) return r;
   const project = r.value.project ?? {};
   if (Object.keys(project).length === 0 && !r.value.event) {
