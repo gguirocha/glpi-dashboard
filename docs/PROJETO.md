@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E2 (API) · Próximo passo: OK do gestor para publicar (migration v5_1, merge em main, nginx, deploy, chave do gestor) · Bloqueios: aguardando OK · Atualizado: 2026-11-27
+> Fase: Execução — E4 pronta, aguardando OK para publicar · Próximo passo: publicar (v5_2, PR, deploy, kit v1.4.0) e G2 da E4 · Bloqueios: aguardando OK · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -55,9 +55,9 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | # | Resultado entregue | Critério de pronto | Status |
 |---|---|---|---|
 | E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | ✔ aprovada (G2 27/11, commit `2beb289`) |
-| E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | em andamento |
-| E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | pendente |
-| E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | pendente |
+| E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | ✔ aprovada (G2 27/11, PR #1 / commit `1b1768a`) |
+| E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | ✔ aprovada (G2 27/11, kit ti-mdf v1.3.1) |
+| E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | em andamento |
 | E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | pendente |
 | E6 | Homologação, segurança e encerramento | A1–A7 marcados; revisão de segurança sem CRITICAL/HIGH; vault atualizado; projeto de teste removido | pendente |
 
@@ -66,8 +66,8 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 |---|---|---|---|
 | G1 Escopo aprovado | 27/11 | 27/11 | 0 |
 | E1 Banco (0,75 d) | 27/11–30/11 | 27/11 | −1 dia útil (adiantada) |
-| E2 API (1,25 d) | 30/11–01/12 | | |
-| E3 Skill pela API (0,5 d) | 02/12 | | |
+| E2 API (1,25 d) | 30/11–01/12 | 27/11 | −2 dias úteis (adiantada) |
+| E3 Skill pela API (0,5 d) | 02/12 | 27/11 | −3 dias úteis (adiantada) |
 | E4 Quadro v2 (1,25 d) | 02/12–03/12 | | |
 | E5 Reports (0,75 d) | 04/12 | | |
 | G3 Liberação / E6 | 04/12 | | |
@@ -115,6 +115,8 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 |---|---|---|---|
 | E1 | Ensaio em produção dentro de transação desfeita: 32/32 testes (idempotência 2×, coerência fase×status, 7 caminhos legados da trigger, guardas de código/prazo prometido, RESTRICT, permissões de anon/authenticated, realtime) | ecc:database-reviewer (0 CRITICAL, 2 HIGH, 7 MEDIUM, 5 LOW) + ecc:security-reviewer (0 CRITICAL/HIGH, 3 MEDIUM) | 2 HIGH (código truncado ≥ id 1000; backfill não idempotente após go-live) e todos os MEDIUM corrigidos; LOW aplicados exceto L4 (saúde dos antigos fica verde) |
 | E2 | vitest 137 testes (100% nas funções puras; tdd-guide, teste primeiro), tsc, eslint dos arquivos do projeto, build de produção; ensaio da função SQL em transação desfeita 24/24 | ecc:security-reviewer (2 passes: 1 HIGH, 4 MEDIUM; reconferência: resolvidos, 1 MEDIUM novo corrigido), ecc:typescript-reviewer (2 HIGH, 6 MEDIUM; 1 alarme falso: coerência fase×status já garantida pela trigger da E1), ecc:database-reviewer (1 HIGH, 4 MEDIUM) | todos os HIGH/MEDIUM corrigidos; aceitos: IDOR (só o gestor tem chave na v2), sem expiração/rotação de chave (v3) |
+| E3 | node:test 133 testes do CLI (tdd-guide, teste primeiro; respostas simuladas no formato real da API); fluxo real contra a API: abrir → G1 → G2 → link mesclado → prometido sem mudança recusado com dica → concluir (PRJ-2026-103); instalador rodado 2× | ecc:security-reviewer (0 CRITICAL/HIGH, 5 MEDIUM) + ecc:code-reviewer (2 HIGH: G1 da skill quebrado e código PRJ calculado errado em 2027; 4 MEDIUM) | todos os HIGH/MEDIUM corrigidos; a mesclagem de links no cliente tem corrida conhecida → mover para o servidor na E4 (registrado em Controle de mudanças) |
+| E4 | vitest 181 testes (board.ts 100% linhas; tdd-guide), tsc, eslint, build; tela conferida na pré-visualização local /dev/quadro (colunas, card, painel, linha do tempo, mover, foco/Esc, sem erros de console); ensaio v5_2 12/12; CLI 129 testes | ecc:react-reviewer (3 HIGH, 6 MEDIUM) + ecc:database-reviewer v5_2 (2 MEDIUM) | todos corrigidos; trava de concorrência e modal real só testáveis com Supabase → conferir na homologação |
 
 **Segurança (G3):** —
 **Quality gate / cobertura:** —
@@ -122,8 +124,13 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 ## 11. Controle de mudanças
 | # | Data | Mudança | Impacto (prazo/escopo) | Aprovado por |
 |---|---|---|---|---|
+| 1 | 27/11 | Mesclagem de `links` passa para o servidor (função `api_write_project`) na E4, junto com o deploy do quadro; até lá o CLI mescla no cliente (corrida conhecida, risco baixo: 1 usuário com chave) | sem impacto de prazo; escopo E4 + pequeno ajuste de SQL | Claude (decisão técnica; informada ao gestor no G2 da E3) |
 
 ## 12. Implantação e volta atrás
+**E1 (27/11):** cópia CSV de `dashboard_projects` (74 linhas) no OneDrive do projeto → migration v5 (COMMIT).
+**E2 (27/11):** migration v5_1 (função `api_write_project`, EXECUTE só service_role) → PR [gguirocha/glpi-dashboard#1](https://github.com/gguirocha/glpi-dashboard/pull/1) mergeado → nginx: backup `/etc/nginx/conf.d/glpi-dashboard.conf.bak_20261127_112703_prj092`, config de `docs/infra/nginx-glpi-dashboard.conf`, `nginx -t` ok, reload → `deploy.sh` (sem `--validate`), BUILD_ID blVdjJlz0uOAXULYMFHpp, health 200 → chave do gestor (id 3) gravada direto no `.ti-mdf.env` (ACL só do usuário), nunca exibida.
+Volta atrás: app `.next.bak` + `pm2 restart`; nginx: restaurar o backup e `systemctl reload nginx`; banco: `DROP FUNCTION api_write_project` (a tela não depende dela).
+
 Ordem: migration (aditiva, idempotente) → push + deploy de API → `projeto.mjs` → UI → reports. Volta atrás do app:
 `.next.bak` do `deploy.sh`. Banco: mudanças aditivas, a tela antiga funciona com as colunas novas (sem DOWN); cópia
 CSV de `dashboard_projects` antes do backfill.
@@ -152,3 +159,9 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E1 aplicada em produção com OK do gestor: cópia CSV (74 projetos) → migration (COMMIT) → conferência: 74 com código, fases abertura/todo=1 · encerrado/done=71 · execucao/in_progress=2; ensaio repetido no banco migrado 32/32; anon via REST 401 nas 3 tabelas; vault atualizado |
 | 2026-11-27 | **G2 da E1 aprovado** pelo gestor; E2 (API) iniciada |
 | 2026-11-27 | E2 construída e revisada (commit `1b1768a`); achados das revisões corrigidos; nginx sem X-Real-IP/limite (proposta em docs/infra) |
+| 2026-11-27 | E2 publicada com OK do gestor (v5_1, PR #1, nginx, deploy, chave id 3). Aceite na API publicada 11/11: A1, A2 (chave descartável id 4 revogada), A7, G2 simulado, prometido sem evento recusado, campo desconhecido recusado; X-Real-IP chegando ao app. Projeto de teste PRJ-2026-102 criado (remover na E6) |
+| 2026-11-27 | Card 92 atualizado pela própria API: fase execução, 1/6 etapas, prometido 04/12, eventos G1 e G2 da E1 (retroativos) |
+| 2026-11-27 | **G2 da E2 aprovado** pelo gestor; card 92 → 2/6 com evento G2 pela API; E3 iniciada |
+| 2026-11-27 | E3: projeto.mjs reescrito para a API (kit ti-mdf v1.3.0/1.3.1), chave mestra removida do .ti-mdf.env do gestor pelo instalador; projeto de teste PRJ-2026-103 criado e concluído (remover na E6) |
+| 2026-11-27 | **G2 da E3 aprovado** pelo gestor; card 92 → 3/6 pela skill; E4 iniciada |
+| 2026-11-27 | E4 construída (commit `8e0e204`): quadro por fases, painel acessível, cache do modo apresentação, junção de links no servidor (v5_2) e CLI com delta (kit local `2367d69`, publicar só após a v5_2) |

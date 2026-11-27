@@ -1,3 +1,5 @@
+import type { EventKind, Health, Phase } from '@/lib/projects/domain';
+
 export interface Ticket {
     id: number;
     name: string;
@@ -52,7 +54,32 @@ export interface Project {
     real_status_id: number | null;
     last_individual_sent_at: string | null;
     last_general_sent_at: string | null;
+    // --- Quadro v2 ---
+    code: string;
+    phase: Phase;
+    health: Health;
+    health_reason: string | null;
+    steps_total: number;
+    steps_done: number;
+    start_date: string | null;
+    baseline_date: string | null;
+    requester: string | null;
+    area: string | null;
+    sponsor: string | null;
+    origin_ticket: string | null;
+    links: Record<string, string>;
+    next_step: string | null;
+    decision_needed: string | null;
+    updated_at: string;
 }
+
+export type ProjectEvent = {
+    id: number;
+    kind: EventKind;
+    summary: string;
+    author: string;
+    created_at: string;
+};
 
 export interface TechnicianRanking {
     technician_id: number;
