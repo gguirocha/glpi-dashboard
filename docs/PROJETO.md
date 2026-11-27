@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E5 em andamento (relatórios) · Próximo passo: G2 da E5 — decidir publicação antes ou depois do disparo de segunda 30/11 07:00 · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: Execução — E5 aprovada, publicando · Próximo passo: publicar E5 e conferir a prévia real antes de segunda 30/11 07:00; depois E6 · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -58,7 +58,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | ✔ aprovada (G2 27/11, PR #1 / commit `1b1768a`) |
 | E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | ✔ aprovada (G2 27/11, kit ti-mdf v1.3.1) |
 | E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | ✔ 27/11 (G2) |
-| E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | em andamento |
+| E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | ✔ 27/11 (G2) |
 | E6 | Homologação, segurança e encerramento | A1–A7 marcados; revisão de segurança sem CRITICAL/HIGH; vault atualizado; projeto de teste removido | pendente |
 
 ## 6. Cronograma (previsto × realizado)
@@ -170,3 +170,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E4 publicada com OK do gestor (v5_2, PR #2, deploy, kit v1.4.0). Visual com dados reais depende de login do gestor (homologação) |
 | 2026-11-27 | **G2 da E4 aprovado** pelo gestor; card 92 → 4/6 pela skill; E5 iniciada |
 | 2026-11-27 | E5 construída e revisada (3 agentes ECC, achados altos corrigidos); prévia real depende de publicar (IA e banco só no servidor); próximo disparo automático = segunda 30/11 07:00 |
+| 2026-11-27 | **G2 da E5 aprovado** pelo gestor com OK para publicar já (segunda 30/11 sai no formato novo se a prévia real for aprovada; senão, volta atrás antes); card 92 → 5/6 |
