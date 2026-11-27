@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E5 publicada (prévia real gerada) · Próximo passo: gestor aprova a prévia real e autoriza remover os projetos de teste 102/103 antes de segunda 30/11 07:00; depois E6 · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: Execução — E5 publicada (prévia real gerada) · Próximo passo: acompanhar o envio de segunda 30/11 07:00; E6 (homologação A1–A7, segurança final, encerramento) · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -172,3 +172,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E5 construída e revisada (3 agentes ECC, achados altos corrigidos); prévia real depende de publicar (IA e banco só no servidor); próximo disparo automático = segunda 30/11 07:00 |
 | 2026-11-27 | **G2 da E5 aprovado** pelo gestor com OK para publicar já (segunda 30/11 sai no formato novo se a prévia real for aprovada; senão, volta atrás antes); card 92 → 5/6 |
 | 2026-11-27 | E5 publicada (PR #3, BUILD_ID PQ8uoGLsVUXDdrByZIJwF, health 200). Prévia real no servidor: 1 geral + 6 individuais, nada enviado/marcado/limpo (conferido no banco). Achado: projetos de teste 102/103 aparecem em Entregas — remover antes de segunda 30/11 07:00 (pede OK do gestor) |
+| 2026-11-27 | Com OK do gestor, projetos de teste PRJ-2026-102/103 apagados em transação (9 eventos + 2 projetos; títulos conferidos antes). Nova prévia real: 1 exceção, 12 entregas, 6 individuais, sem testes. Segunda 30/11 07:00 sai no formato novo |
