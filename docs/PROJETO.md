@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Segurança — revisão final concluída, aguardando G3 · Próximo passo: G3 — liberar publicação das correções de segurança (Dash + kit 1.4.1); homologação pelo roteiro docs/HOMOLOGACAO.md · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: Homologação — G3 liberado, publicando correções · Próximo passo: homologação pelo roteiro docs/HOMOLOGACAO.md (A3, A4, A6) e e-mail de segunda 30/11 (A5) · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -175,3 +175,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E5 publicada (PR #3, BUILD_ID PQ8uoGLsVUXDdrByZIJwF, health 200). Prévia real no servidor: 1 geral + 6 individuais, nada enviado/marcado/limpo (conferido no banco). Achado: projetos de teste 102/103 aparecem em Entregas — remover antes de segunda 30/11 07:00 (pede OK do gestor) |
 | 2026-11-27 | Com OK do gestor, projetos de teste PRJ-2026-102/103 apagados em transação (9 eventos + 2 projetos; títulos conferidos antes). Nova prévia real: 1 exceção, 12 entregas, 6 individuais, sem testes. Segunda 30/11 07:00 sai no formato novo |
 | 2026-11-27 | E6 iniciada a pedido do gestor: revisão de segurança final e quality gate; correções na branch feat/prj-2026-092-e6 e no kit 1.4.1 (não publicados); roteiro de homologação em docs/HOMOLOGACAO.md |
+| 2026-11-27 | **G3 liberado** pelo gestor (publicar agora, antes de segunda); card 92 → Homologação |
