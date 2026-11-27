@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Fase: **Execução — E1 (banco)** · Saúde: 🟢 (no prazo)
-> Próximo passo: OK do gestor para aplicar a migration v5 (com cópia CSV antes) · Bloqueios: aguardando OK · Atualizado: 2026-11-27
+> Próximo passo: G2 da E1 (gestor aprova o resultado); depois E2 (API) · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -54,7 +54,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 ## 5. Entregas (etapas)
 | # | Resultado entregue | Critério de pronto | Status |
 |---|---|---|---|
-| E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | em andamento |
+| E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | aguardando aprovação |
 | E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | pendente |
 | E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | pendente |
 | E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | pendente |
@@ -65,7 +65,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | Marco / etapa | Previsto | Realizado | Desvio |
 |---|---|---|---|
 | G1 Escopo aprovado | 27/11 | 27/11 | 0 |
-| E1 Banco (0,75 d) | 27/11–30/11 | | |
+| E1 Banco (0,75 d) | 27/11–30/11 | 27/11 | −1 dia útil (adiantada) |
 | E2 API (1,25 d) | 30/11–01/12 | | |
 | E3 Skill pela API (0,5 d) | 02/12 | | |
 | E4 Quadro v2 (1,25 d) | 02/12–03/12 | | |
@@ -148,3 +148,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E1: esquema real lido (read-only) e versionado em migration_v5_0_baseline.sql; achado: tabelas/sequências novas nascem com grants para anon/authenticated (default privileges) |
 | 2026-11-27 | E1: migration v5 revisada por database-reviewer e security-reviewer, corrigida e ensaiada em transação desfeita (32/32) |
 | 2026-11-27 | Decisão: eventos com ON DELETE RESTRICT (trilha de auditoria não some por DELETE na tela); código PRJ e prazo prometido protegidos na trigger. Fora do escopo (follow-up): ALTER DEFAULT PRIVILEGES do schema public para objetos futuros |
+| 2026-11-27 | E1 aplicada em produção com OK do gestor: cópia CSV (74 projetos) → migration (COMMIT) → conferência: 74 com código, fases abertura/todo=1 · encerrado/done=71 · execucao/in_progress=2; ensaio repetido no banco migrado 32/32; anon via REST 401 nas 3 tabelas; vault atualizado |
