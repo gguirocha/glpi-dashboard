@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E2 (API) · Próximo passo: OK do gestor para publicar (migration v5_1, merge em main, nginx, deploy, chave do gestor) · Bloqueios: aguardando OK · Atualizado: 2026-11-27
+> Fase: Execução — E2 publicada, aguardando G2 · Próximo passo: G2 da E2; depois E3 (skill pela API) · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -55,7 +55,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | # | Resultado entregue | Critério de pronto | Status |
 |---|---|---|---|
 | E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | ✔ aprovada (G2 27/11, commit `2beb289`) |
-| E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | em andamento |
+| E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | aguardando aprovação |
 | E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | pendente |
 | E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | pendente |
 | E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | pendente |
@@ -66,7 +66,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 |---|---|---|---|
 | G1 Escopo aprovado | 27/11 | 27/11 | 0 |
 | E1 Banco (0,75 d) | 27/11–30/11 | 27/11 | −1 dia útil (adiantada) |
-| E2 API (1,25 d) | 30/11–01/12 | | |
+| E2 API (1,25 d) | 30/11–01/12 | 27/11 | −2 dias úteis (adiantada) |
 | E3 Skill pela API (0,5 d) | 02/12 | | |
 | E4 Quadro v2 (1,25 d) | 02/12–03/12 | | |
 | E5 Reports (0,75 d) | 04/12 | | |
@@ -124,6 +124,10 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 |---|---|---|---|---|
 
 ## 12. Implantação e volta atrás
+**E1 (27/11):** cópia CSV de `dashboard_projects` (74 linhas) no OneDrive do projeto → migration v5 (COMMIT).
+**E2 (27/11):** migration v5_1 (função `api_write_project`, EXECUTE só service_role) → PR [gguirocha/glpi-dashboard#1](https://github.com/gguirocha/glpi-dashboard/pull/1) mergeado → nginx: backup `/etc/nginx/conf.d/glpi-dashboard.conf.bak_20261127_112703_prj092`, config de `docs/infra/nginx-glpi-dashboard.conf`, `nginx -t` ok, reload → `deploy.sh` (sem `--validate`), BUILD_ID blVdjJlz0uOAXULYMFHpp, health 200 → chave do gestor (id 3) gravada direto no `.ti-mdf.env` (ACL só do usuário), nunca exibida.
+Volta atrás: app `.next.bak` + `pm2 restart`; nginx: restaurar o backup e `systemctl reload nginx`; banco: `DROP FUNCTION api_write_project` (a tela não depende dela).
+
 Ordem: migration (aditiva, idempotente) → push + deploy de API → `projeto.mjs` → UI → reports. Volta atrás do app:
 `.next.bak` do `deploy.sh`. Banco: mudanças aditivas, a tela antiga funciona com as colunas novas (sem DOWN); cópia
 CSV de `dashboard_projects` antes do backfill.
@@ -152,3 +156,5 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | E1 aplicada em produção com OK do gestor: cópia CSV (74 projetos) → migration (COMMIT) → conferência: 74 com código, fases abertura/todo=1 · encerrado/done=71 · execucao/in_progress=2; ensaio repetido no banco migrado 32/32; anon via REST 401 nas 3 tabelas; vault atualizado |
 | 2026-11-27 | **G2 da E1 aprovado** pelo gestor; E2 (API) iniciada |
 | 2026-11-27 | E2 construída e revisada (commit `1b1768a`); achados das revisões corrigidos; nginx sem X-Real-IP/limite (proposta em docs/infra) |
+| 2026-11-27 | E2 publicada com OK do gestor (v5_1, PR #1, nginx, deploy, chave id 3). Aceite na API publicada 11/11: A1, A2 (chave descartável id 4 revogada), A7, G2 simulado, prometido sem evento recusado, campo desconhecido recusado; X-Real-IP chegando ao app. Projeto de teste PRJ-2026-102 criado (remover na E6) |
+| 2026-11-27 | Card 92 atualizado pela própria API: fase execução, 1/6 etapas, prometido 04/12, eventos G1 e G2 da E1 (retroativos) |
