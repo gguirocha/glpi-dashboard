@@ -1,8 +1,8 @@
 # Documento do Projeto — Quadro de Projetos v2 + API de projetos
 
 > **Situação atual**
-> Fase: **Abertura → aguardando G1** · Saúde: 🟢 (escopo fechado, prazo apertado mas viável)
-> Próximo passo: G1 (gestor aprova escopo, etapas e decisões de desenho) · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: **Execução — E1 (banco)** · Saúde: 🟢 (no prazo)
+> Próximo passo: ler o esquema real, escrever migrations, revisão ECC, pedir OK para aplicar · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -54,7 +54,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 ## 5. Entregas (etapas)
 | # | Resultado entregue | Critério de pronto | Status |
 |---|---|---|---|
-| E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | pendente |
+| E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | em andamento |
 | E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | pendente |
 | E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | pendente |
 | E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | pendente |
@@ -64,7 +64,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 ## 6. Cronograma (previsto × realizado)
 | Marco / etapa | Previsto | Realizado | Desvio |
 |---|---|---|---|
-| G1 Escopo aprovado | 27/11 | | |
+| G1 Escopo aprovado | 27/11 | 27/11 | 0 |
 | E1 Banco (0,75 d) | 27/11–30/11 | | |
 | E2 API (1,25 d) | 30/11–01/12 | | |
 | E3 Skill pela API (0,5 d) | 02/12 | | |
@@ -129,7 +129,7 @@ CSV de `dashboard_projects` antes do backfill.
 ## 13. Aceite
 | Portão | Quem | Data | Ressalvas |
 |---|---|---|---|
-| G1 Escopo (patrocinador + solicitante) | | | |
+| G1 Escopo (patrocinador + solicitante) | Gestor de Projetos (Guilherme Rocha) | 27/11/2026 | sem ressalvas; inclui as decisões de desenho da seção 9 |
 | G3 Liberação técnica (gestor) | | | |
 | G4 Homologação (solicitante) | | | |
 | Encerramento (patrocinador) | | | |
@@ -142,3 +142,4 @@ CSV de `dashboard_projects` antes do backfill.
 |---|---|
 | 2026-11-27 | Projeto aberto (card 92); explorer mapeou o módulo de projetos; 4 decisões do gestor (fases, report de exceções, chave só do gestor, prazo 1 semana); planner montou 6 etapas (5 dias úteis) |
 | 2026-11-27 | Explorer apontou "anon escreve em dashboard_projects": descartado, teste de 27/11 deu 401 (grants revogados em 24/11) |
+| 2026-11-27 | **G1 aprovado** pelo gestor; card 92 → Em desenvolvimento, prazo 04/12; E1 iniciada |

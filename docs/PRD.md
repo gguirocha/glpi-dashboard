@@ -1,7 +1,7 @@
 # PRD — Quadro de Projetos v2 + API de projetos (PRJ-2026-092)
 
 > Documento para o **solicitante validar**. Linguagem de negócio.
-> Versão 0.2 · 2026-11-27 · Status: **aguardando validação no G1**
+> Versão 1.0 · 2026-11-27 · Status: **validado no G1 por Gestor de Projetos (Guilherme Rocha) em 27/11/2026**
 
 ## 1. Problema
 O quadro de projetos do GLPI Dash só diz se um projeto está "a fazer", "em andamento" ou "concluído". Não mostra
@@ -91,4 +91,4 @@ atualizado **sozinho** a cada portão do fluxo de projetos, e **cada colaborador
 ## Validação
 | Solicitante | Data | Ressalvas |
 |---|---|---|
-| | | |
+| Gestor de Projetos (Guilherme Rocha) | 27/11/2026 | nenhuma |
