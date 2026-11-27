@@ -116,7 +116,32 @@ async function weeklyTick() {
             `[WeeklyScheduler] Disparando ciclo — ocorrência ${occurrence.toLocaleString("pt-BR")} (dia ${schedule.dayOfWeek}, ${String(schedule.hour).padStart(2, "0")}:${String(schedule.minute).padStart(2, "0")})`
         );
 
-        const cycle = await wr.runWeeklyCycle();
+        let cycle: Awaited<ReturnType<typeof wr.runWeeklyCycle>>;
+        try {
+            cycle = await wr.runWeeklyCycle();
+        } catch (err) {
+            if (err instanceof wr.CycleLoadError) {
+                // Leitura falhou ANTES de qualquer envio: devolve o marcador para tentar de novo
+                // no próximo tick (limitado por MAX_MARKER_ATTEMPTS nesta ocorrência).
+                const restored = await wr.setCycleLastFiredAt(state.lastFiredAt ?? new Date(0));
+                if (restored) firedOccurrenceKey = null;
+                console.error(
+                    `[WeeklyScheduler] Leitura do banco falhou antes do envio (tentativa ${markerAttempts}/${MAX_MARKER_ATTEMPTS})` +
+                    (restored ? " — nova tentativa no próximo tick." : " — marcador não restaurado; ciclo desta semana perdido.")
+                );
+                if (!restored || markerAttempts >= MAX_MARKER_ATTEMPTS) {
+                    await wr.supabaseDeps()
+                        .alert(
+                            "[GLPI Dash] Report semanal NÃO saiu",
+                            `O banco não respondeu em ${markerAttempts} tentativa(s) na janela de ${occurrence.toLocaleString("pt-BR")}. ` +
+                            `Nenhum e-mail foi enviado. Rode a prévia e o envio manual pela rota /api/cron/weekly-report.\nErro: ${err.message}`
+                        )
+                        .catch((e) => console.error("[WeeklyScheduler] Alerta para a TI não saiu:", e));
+                }
+                return;
+            }
+            throw err;
+        }
 
         console.log(
             `[WeeklyScheduler] Individual — ${cycle.individual.succeeded} enviados, ${cycle.individual.failed} falhas, ${cycle.individual.skipped} ignorados, ${cycle.individual.processed} processados.`
@@ -124,12 +149,13 @@ async function weeklyTick() {
 
         if (cycle.general.enabled) {
             console.log(
-                `[WeeklyScheduler] Geral — sucesso=${cycle.general.success}, projetos=${cycle.general.projectsIncluded}, destinatários=${cycle.general.sentTo.length}` +
+                `[WeeklyScheduler] Geral — sucesso=${cycle.general.success}, exceções=${cycle.general.exceptions}, entregas=${cycle.general.deliveries}, destinatários=${cycle.general.sentTo.length}` +
                 (cycle.general.error ? `, erro=${cycle.general.error}` : "")
             );
         } else {
             console.log("[WeeklyScheduler] Geral desabilitado nas configurações.");
         }
+        for (const w of cycle.warnings) console.warn(`[WeeklyScheduler] Aviso: ${w}`);
 
         console.log(`[WeeklyScheduler] Cleanup — weekly_update limpo em ${cycle.cleared} projeto(s).`);
     } catch (err) {
