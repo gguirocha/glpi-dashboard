@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E3 concluída, aguardando G2 · Próximo passo: G2 da E3; depois E4 (quadro por fases) · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: Execução — E4 (quadro v2) · Próximo passo: lógica com testes, junção de links no servidor, tela, revisão ECC · Bloqueios: nenhum · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -56,8 +56,8 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 |---|---|---|---|
 | E1 | Banco pronto, nada quebra: 72 projetos com código e fase; tela e script atuais funcionando igual | contagem por fase bate com `status`; migration roda 2× sem diferença; anon recebe 401 nas tabelas novas; tela antiga move/edita normal | ✔ aprovada (G2 27/11, commit `2beb289`) |
 | E2 | API no ar com chave pessoal | A1, A2, A7 provados por curl; testes unitários, lint e build verdes | ✔ aprovada (G2 27/11, PR #1 / commit `1b1768a`) |
-| E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | aguardando aprovação |
-| E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | pendente |
+| E3 | Skill registra sem chave mestra (`projeto.mjs` só pela API) | fluxo abrir → G1 → G2 → concluir no projeto de teste; nenhuma `SERVICE_KEY` no script nem no `.ti-mdf.env` | ✔ aprovada (G2 27/11, kit ti-mdf v1.3.1) |
+| E4 | Quadro v2 por fase com saúde, barra, desvio, linha do tempo, indicadores e WIP | A3, A4, A6 provados; 1 consulta com colunas fixas no carregamento; eventos só ao abrir o card | em andamento |
 | E5 | Reports novos (individual e geral de exceções + entregas) | prévia revisada pelo gestor sem envio real; A5 real na segunda 07/12 | pendente |
 | E6 | Homologação, segurança e encerramento | A1–A7 marcados; revisão de segurança sem CRITICAL/HIGH; vault atualizado; projeto de teste removido | pendente |
 
@@ -162,3 +162,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | Card 92 atualizado pela própria API: fase execução, 1/6 etapas, prometido 04/12, eventos G1 e G2 da E1 (retroativos) |
 | 2026-11-27 | **G2 da E2 aprovado** pelo gestor; card 92 → 2/6 com evento G2 pela API; E3 iniciada |
 | 2026-11-27 | E3: projeto.mjs reescrito para a API (kit ti-mdf v1.3.0/1.3.1), chave mestra removida do .ti-mdf.env do gestor pelo instalador; projeto de teste PRJ-2026-103 criado e concluído (remover na E6) |
+| 2026-11-27 | **G2 da E3 aprovado** pelo gestor; card 92 → 3/6 pela skill; E4 iniciada |
