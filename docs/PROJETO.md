@@ -2,7 +2,7 @@
 
 > **Situação atual**
 > Saúde: 🟢 (1 dia útil adiantado)
-> Fase: Execução — E2 (API) · Próximo passo: lógica + testes, função de gravação, rotas, revisão ECC · Bloqueios: nenhum · Atualizado: 2026-11-27
+> Fase: Execução — E2 (API) · Próximo passo: OK do gestor para publicar (migration v5_1, merge em main, nginx, deploy, chave do gestor) · Bloqueios: aguardando OK · Atualizado: 2026-11-27
 
 ## 1. Identificação
 | Campo | Valor |
@@ -114,6 +114,7 @@ id 5 = "Bloqueado" no catálogo de situações (conferir em E1).
 | Etapa | Testes (verification-loop / e2e) | Revisão (code + linguagem + banco) | Achados CRITICAL/HIGH corrigidos |
 |---|---|---|---|
 | E1 | Ensaio em produção dentro de transação desfeita: 32/32 testes (idempotência 2×, coerência fase×status, 7 caminhos legados da trigger, guardas de código/prazo prometido, RESTRICT, permissões de anon/authenticated, realtime) | ecc:database-reviewer (0 CRITICAL, 2 HIGH, 7 MEDIUM, 5 LOW) + ecc:security-reviewer (0 CRITICAL/HIGH, 3 MEDIUM) | 2 HIGH (código truncado ≥ id 1000; backfill não idempotente após go-live) e todos os MEDIUM corrigidos; LOW aplicados exceto L4 (saúde dos antigos fica verde) |
+| E2 | vitest 137 testes (100% nas funções puras; tdd-guide, teste primeiro), tsc, eslint dos arquivos do projeto, build de produção; ensaio da função SQL em transação desfeita 24/24 | ecc:security-reviewer (2 passes: 1 HIGH, 4 MEDIUM; reconferência: resolvidos, 1 MEDIUM novo corrigido), ecc:typescript-reviewer (2 HIGH, 6 MEDIUM; 1 alarme falso: coerência fase×status já garantida pela trigger da E1), ecc:database-reviewer (1 HIGH, 4 MEDIUM) | todos os HIGH/MEDIUM corrigidos; aceitos: IDOR (só o gestor tem chave na v2), sem expiração/rotação de chave (v3) |
 
 **Segurança (G3):** —
 **Quality gate / cobertura:** —
@@ -150,3 +151,4 @@ CSV de `dashboard_projects` antes do backfill.
 | 2026-11-27 | Decisão: eventos com ON DELETE RESTRICT (trilha de auditoria não some por DELETE na tela); código PRJ e prazo prometido protegidos na trigger. Fora do escopo (follow-up): ALTER DEFAULT PRIVILEGES do schema public para objetos futuros |
 | 2026-11-27 | E1 aplicada em produção com OK do gestor: cópia CSV (74 projetos) → migration (COMMIT) → conferência: 74 com código, fases abertura/todo=1 · encerrado/done=71 · execucao/in_progress=2; ensaio repetido no banco migrado 32/32; anon via REST 401 nas 3 tabelas; vault atualizado |
 | 2026-11-27 | **G2 da E1 aprovado** pelo gestor; E2 (API) iniciada |
+| 2026-11-27 | E2 construída e revisada (commit `1b1768a`); achados das revisões corrigidos; nginx sem X-Real-IP/limite (proposta em docs/infra) |
